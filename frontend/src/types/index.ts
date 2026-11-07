@@ -4,6 +4,12 @@ export interface UserProfile {
   id: string;
   name: string;
   role: string;
+  urbanizacion: string;
+  sector: string;
+  calle: string;
+  numero: string;
+  servicePin: string; // PIN de 4 dígitos para validar servicios otorgados
+  // Propiedades de retrocompatibilidad
   building: string;
   portal: string;
   apartment: string;
@@ -50,6 +56,18 @@ export interface ActaAviso {
   previewText: string;
 }
 
+export type ServiceCategoryType =
+  | 'todos'
+  | 'alimentacion'
+  | 'mantenimiento_hogar'
+  | 'salud_bienestar'
+  | 'compras_bazar'
+  | 'servicios_tramites'
+  | 'vehiculos_mascotas'
+  | 'otros';
+
+export type TipoActividadServicio = 'profesion' | 'oficio';
+
 export interface ServiceReview {
   id: string;
   author: string;
@@ -67,7 +85,11 @@ export interface ServiceProvider {
   avatarUrl: string;
   recommendationsCount: number;
   specialtyDetails: string;
-  category: 'fontaneria' | 'electricidad' | 'cerrajeria' | 'hogar';
+  category: ServiceCategoryType;
+  tipoActividad: TipoActividadServicio; // 'profesion' (requiere verificación) | 'oficio' (sin verificación, avalado por vistos buenos)
+  colegiatura?: string; // Ej: CEP #48291, CAL #71204
+  verified: boolean; // true ÚNICAMENTE para personas con profesión
+  servicePin: string; // PIN de 4 dígitos para que el cliente valide la recomendación
   reviews: ServiceReview[];
   phone: string;
 }
