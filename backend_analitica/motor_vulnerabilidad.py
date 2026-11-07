@@ -8,7 +8,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 #Confirguración conexión a Supabase(PostgreSQL)
-DB_URI = "postgresql://postgres:System_Vecinal123@db.rbldfilrlaslncwwodxn.supabase.co:5432/postgres"
+DB_URI = "postgresql://postgres.rbldfilrlaslncwwodxn:System_Vecinal123@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 
 def analizar_vulnerabilidad():
     print("Iniciando análisis de emergencias...")
@@ -96,3 +96,6 @@ def analizar_vulnerabilidad():
             cursor.close()
         if 'conn' in locals() and conn is not None:
             conn.close()
+
+if __name__ == "__main__":
+    analizar_vulnerabilidad()
