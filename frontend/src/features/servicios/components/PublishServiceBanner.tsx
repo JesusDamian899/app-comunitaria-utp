@@ -1,9 +1,10 @@
 import { Wrench, PlusCircle } from 'lucide-react';
-import { useApp } from '../../../context/AppContext';
 
-export const PublishServiceBanner = () => {
-  const { showToast } = useApp();
+interface PublishServiceBannerProps {
+  onOpenPublish: () => void;
+}
 
+export const PublishServiceBanner = ({ onOpenPublish }: PublishServiceBannerProps) => {
   return (
     <div className="w-full bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5 shadow-2xs">
       <div className="flex items-start gap-3 sm:gap-4">
@@ -22,7 +23,7 @@ export const PublishServiceBanner = () => {
 
       <button
         type="button"
-        onClick={() => showToast('Abriendo formulario para publicar nuevo oficio')}
+        onClick={onOpenPublish}
         className="w-full py-2.5 sm:py-3 px-4 bg-[#172554] hover:bg-blue-900 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-[0.99]"
       >
         <PlusCircle className="w-4 h-4" />

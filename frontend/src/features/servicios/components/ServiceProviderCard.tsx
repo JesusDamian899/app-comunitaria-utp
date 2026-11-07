@@ -6,28 +6,16 @@ import type { ServiceProvider } from '../../../types';
 interface ServiceProviderCardProps {
   provider: ServiceProvider;
   defaultExpanded?: boolean;
+  onRecommendClick: (provider: ServiceProvider) => void;
 }
 
 export const ServiceProviderCard = ({
   provider,
   defaultExpanded = true,
+  onRecommendClick,
 }: ServiceProviderCardProps) => {
   const { showToast } = useApp();
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
-  const [recommendations, setRecommendations] = useState<number>(provider.recommendationsCount);
-  const [hasRecommended, setHasRecommended] = useState<boolean>(false);
-
-  const handleRecommend = () => {
-    if (hasRecommended) {
-      setRecommendations((r) => r - 1);
-      setHasRecommended(false);
-      showToast(`Has retirado tu recomendación para ${provider.name}`);
-    } else {
-      setRecommendations((r) => r + 1);
-      setHasRecommended(true);
-      showToast(`¡Has recomendado a ${provider.name}!`);
-    }
-  };
 
   const firstName = provider.name.split(' ')[1] || provider.name;
 
@@ -68,24 +56,20 @@ export const ServiceProviderCard = ({
         </span>
       </div>
 
-      {/* Fila de Visto Bueno y Botón de Recomendar */}
+      {/* Fila de Visto Bueno y Botón de Recomendar (Alineado con perfiles.vistos_buenos) */}
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <div className="bg-blue-50/80 border border-blue-100 text-blue-800 text-[11px] sm:text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5">
           <ThumbsUp className="w-3.5 h-3.5 fill-blue-600 text-blue-600" />
-          <span>Visto Bueno ({recommendations} recomiendan)</span>
+          <span>Visto Bueno ({provider.recommendationsCount} recomiendan)</span>
         </div>
 
         <button
           type="button"
-          onClick={handleRecommend}
-          className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
-            hasRecommended
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-          }`}
+          onClick={() => onRecommendClick(provider)}
+          className="text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-all cursor-pointer"
         >
           <ThumbsUp className="w-3.5 h-3.5" />
-          <span>{hasRecommended ? 'Recomendado' : 'Recomendar'}</span>
+          <span>Recomendar</span>
         </button>
       </div>
 

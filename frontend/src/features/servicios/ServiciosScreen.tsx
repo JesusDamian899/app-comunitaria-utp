@@ -4,15 +4,25 @@ import { SearchServiceBar } from './components/SearchServiceBar';
 import { ServiceCategoryChips, type ServiceCategory } from './components/ServiceCategoryChips';
 import { PublishServiceBanner } from './components/PublishServiceBanner';
 import { ServiceProviderCard } from './components/ServiceProviderCard';
+import { CreateServiceModal } from './components/CreateServiceModal';
+import { RecommendModal } from './components/RecommendModal';
 import { MOCK_PROVIDERS } from '../../mock/data';
+import type { ServiceProvider, ServiceReview } from '../../types';
 
 export const ServiciosScreen = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory>('todos');
 
+  // Estado dinámico de proveedores alineado al modelado oficios_locales y perfiles
+  const [providers, setProviders] = useState<ServiceProvider[]>(MOCK_PROVIDERS);
+
+  // Estados de modales (Regla de 3 clics)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [recommendingProvider, setRecommendingProvider] = useState<ServiceProvider | null>(null);
+
   // Filtrado reactivo en tiempo real por categoría y texto de búsqueda
   const filteredProviders = useMemo(() => {
-    return MOCK_PROVIDERS.filter((provider) => {
+    return providers.filter((provider) => {
       const matchesCategory =
         selectedCategory === 'todos' || provider.category === selectedCategory;
 
@@ -25,7 +35,32 @@ export const ServiciosScreen = () => {
 
       return matchesCategory && matchesQuery;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [providers, searchQuery, selectedCategory]);
+
+  // Manejo de nuevo oficio creado
+  const handleServiceCreated = (newService: ServiceProvider) => {
+    setProviders((prev) => [newService, ...prev]);
+  };
+
+  // Manejo de visto bueno (vistos_buenos en perfiles)
+  const handleRecommendationSubmitted = (
+    providerId: string,
+    updatedVistosBuenos: number,
+    newReview?: ServiceReview
+  ) => {
+    setProviders((prev) =>
+      prev.map((prov) => {
+        if (prov.id === providerId) {
+          return {
+            ...prov,
+            recommendationsCount: updatedVistosBuenos,
+            reviews: newReview ? [newReview, ...prov.reviews] : prov.reviews,
+          };
+        }
+        return prov;
+      })
+    );
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -41,8 +76,10 @@ export const ServiciosScreen = () => {
         onSelectCategory={setSelectedCategory}
       />
 
-      {/* 3. Banner Promocional: "¿Ofreces un servicio local?" */}
-      <PublishServiceBanner />
+      {/* 3. Banner Promocional con apertura directa del modal (Clic 1) */}
+      <PublishServiceBanner
+        onOpenPublish={() => setIsCreateModalOpen(true)}
+      />
 
       {/* 4. Encabezado de Sección: "Profesionales de Confianza" */}
       <div className="flex items-center justify-between pt-1">
@@ -75,10 +112,26 @@ export const ServiciosScreen = () => {
               key={provider.id}
               provider={provider}
               defaultExpanded={provider.id === 'prov-1'}
+              onRecommendClick={(prov) => setRecommendingProvider(prov)}
             />
           ))}
         </div>
       )}
+
+      {/* Modal 1: Crear Servicio (oficios_locales) */}
+      <CreateServiceModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onServiceCreated={handleServiceCreated}
+      />
+
+      {/* Modal 2: Recomendar Profesional (perfiles.vistos_buenos) */}
+      <RecommendModal
+        isOpen={!!recommendingProvider}
+        provider={recommendingProvider}
+        onClose={() => setRecommendingProvider(null)}
+        onRecommendationSubmitted={handleRecommendationSubmitted}
+      />
     </div>
   );
 };
