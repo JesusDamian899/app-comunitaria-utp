@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Wrench, Zap, KeyRound, Home, Paintbrush, MapPin, Sparkles } from 'lucide-react';
+import { X, Wrench, Zap, KeyRound, Paintbrush, MapPin, Sparkles } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
 import { CURRENT_USER } from '../../../mock/data';
 import type { ServiceProvider } from '../../../types';
@@ -36,7 +36,6 @@ export const CreateServiceModal = ({
   const [ubicacion, setUbicacion] = useState<string>(
     `${CURRENT_USER.building}, ${CURRENT_USER.portal} (${CURRENT_USER.apartment})`
   );
-  const [tarifa, setTarifa] = useState<string>('Tarifa vecinal acordada');
 
   if (!isOpen) return null;
 

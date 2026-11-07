@@ -14,11 +14,8 @@ export const InicioScreen = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Hola, Carlos
+            Hola, Carlos!
           </h2>
-          <p className="text-xs sm:text-sm text-slate-500 font-medium">
-            Resumen de actividad en tu comunidad
-          </p>
         </div>
         <button
           type="button"
@@ -30,7 +27,6 @@ export const InicioScreen = () => {
         </button>
       </div>
 
-      {/* Chips de filtro de alcance vecinal */}
       <ScopeFilterChips />
 
       {/* Grid adaptativo: 1 columna en móvil y 3 columnas armónicas en tablet/desktop */}
