@@ -5,26 +5,33 @@ import { ServiciosScreen } from './features/servicios/ServiciosScreen';
 import { SolidaridadScreen } from './features/solidaridad/SolidaridadScreen';
 import { PerfilScreen } from './features/perfil/PerfilScreen';
 import { SosScreen } from './features/SOS/SosScreen';
+import { TutorialModal } from './features/tutorial/components/TutorialModal';
 
 function MainApp() {
-  const { currentTab, isSosOpen } = useApp();
-
-  // Si el usuario activa el botón de pánico SOS, mostramos la pantalla de emergencia
-  if (isSosOpen) {
-    return (
-      <div className="min-h-screen w-full bg-[#f8fafc] p-4 sm:p-6 lg:p-10 flex items-center justify-center">
-        <SosScreen />
-      </div>
-    );
-  }
+  const { currentTab, isSosOpen, isTutorialOpen, closeTutorial } = useApp();
 
   return (
-    <AppLayout>
-      {currentTab === 'inicio' && <InicioScreen />}
-      {currentTab === 'servicios' && <ServiciosScreen />}
-      {currentTab === 'solidaridad' && <SolidaridadScreen />}
-      {currentTab === 'perfil' && <PerfilScreen />}
-    </AppLayout>
+    <>
+      {/* Modal del Tutorial interactivo por módulo */}
+      <TutorialModal
+        isOpen={isTutorialOpen}
+        onClose={closeTutorial}
+      />
+
+      {/* Si el usuario activa el botón de pánico SOS, mostramos la pantalla de emergencia */}
+      {isSosOpen ? (
+        <div className="min-h-screen w-full bg-[#f8fafc] p-4 sm:p-6 lg:p-10 flex items-center justify-center">
+          <SosScreen />
+        </div>
+      ) : (
+        <AppLayout>
+          {currentTab === 'inicio' && <InicioScreen />}
+          {currentTab === 'servicios' && <ServiciosScreen />}
+          {currentTab === 'solidaridad' && <SolidaridadScreen />}
+          {currentTab === 'perfil' && <PerfilScreen />}
+        </AppLayout>
+      )}
+    </>
   );
 }
 

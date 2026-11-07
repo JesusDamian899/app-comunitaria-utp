@@ -27,7 +27,7 @@ export const PublishServiceBanner = ({ onOpenPublish }: PublishServiceBannerProp
         className="w-full py-2.5 sm:py-3 px-4 bg-[#172554] hover:bg-blue-900 text-white rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs cursor-pointer transition-all active:scale-[0.99]"
       >
         <PlusCircle className="w-4 h-4" />
-        <span>+ Publicar servicio</span>
+        <span> Publicar servicio</span>
       </button>
     </div>
   );
