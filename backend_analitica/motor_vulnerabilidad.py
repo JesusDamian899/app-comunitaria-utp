@@ -1,133 +1,101 @@
-"""
-Motor de Cálculo de Vulnerabilidad Comunitaria - Edificio Roble
-Calcula el índice de prioridad de rescate y auxilio en tiempo real
-para Conserjería, Bomberos y Protección Civil.
-"""
+#Importaciones de librerias
+import pandas as pd
+import numpy as np
+from sklearn.cluster import DBSCAN
+import psycopg2
+from psycopg2.extras import execute_values
+import warnings
 
-from typing import Dict, List, Any
-from datetime import datetime, timezone
+warnings.filterwarnings('ignore')
+#Confirguración conexión a Supabase(PostgreSQL)
+DB_URI = "postgresql://postgres.rbldfilrlaslncwwodxn:System_Vecinal123@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
 
-class MotorVulnerabilidad:
-    def __init__(self):
-        # Factores de ponderación
-        self.PESO_ADULTO_MAYOR = 40.0
-        self.PESO_MOVILIDAD_REDUCIDA = 30.0
-        self.PESO_PISO_SIN_ASCENSOR = 5.0  # Multiplicador por piso
-        self.PESO_ELECTRODEPENDIENTE = 50.0
+def analizar_vulnerabilidad():
+    print("Iniciando análisis de emergencias...")
 
-    def calcular_indice_departamento(
-        self,
-        departamento: str,
-        piso: int,
-        tiene_adulto_mayor: bool,
-        tiene_movilidad_reducida: bool,
-        es_electrodependiente: bool = False,
-        ascensor_operativo: bool = True
-    ) -> Dict[str, Any]:
+    try:
+        conn = psycopg2.connect(DB_URI)
+        cursor = conn.cursor()
+
+        # 1. Extracción de datos limpia
+        query_extraccion = """
+            SELECT id, tipo_emergencia, gravedad,
+                   ST_Y(ubicacion::geometry) AS lat,
+                   ST_X(ubicacion::geometry) AS lon
+            FROM alertas_emergencia;
         """
-        Calcula el score de vulnerabilidad de un departamento de 0 a 100.
+
+        cursor.execute(query_extraccion)
+        registros = cursor.fetchall()
+
+        # Si no hay datos, cerramos todo de forma segura
+        if not registros:
+            print("No hay alertas de emergencia para procesar.")
+            cursor.close()
+            conn.close()
+            return
+
+        # Convertimos los datos nativos a un DataFrame de Pandas
+        columnas = [desc[0] for desc in cursor.description]
+        df = pd.DataFrame(registros, columns=columnas)
+
+        # 2. Procesamiento y Clustering (DBSCAN)
+        # Convertimos lat/lon a radianes para la métrica haversine
+        coords = np.radians(df[['lat', 'lon']])
+
+        # eps = 500 metros (0.5 km) / radio de la Tierra (6371.0 km)
+        kms_per_radian = 6371.0
+        epsilon = 0.5 / kms_per_radian
+
+        db = DBSCAN(eps=epsilon, min_samples=3, algorithm='ball_tree', metric='haversine').fit(coords)
+        df['cluster'] = db.labels_
+
+        # Filtramos el ruido (clústeres con valor -1)
+        df_clusters = df[df['cluster'] != -1]
+
+        if df_clusters.empty:
+            print("No se encontraron zonas críticas de alta densidad (mínimo 3 reportes cercanos).")
+            cursor.close()
+            conn.close()
+            return
+
+        # 3. Generación de Insights
+        zonas_criticas = []
+
+        for cluster_id, grupo in df_clusters.groupby('cluster'):
+            centro_lat = grupo['lat'].mean()
+            centro_lon = grupo['lon'].mean()
+            cantidad = len(grupo)
+
+            gravedad_zona = "ALTA" if cantidad > 5 else "MEDIA"
+
+            zonas_criticas.append((
+                f"SRID=4326;POINT({centro_lon} {centro_lat})", # Formato WKT exacto para PostGIS
+                500.0,
+                cantidad,
+                gravedad_zona
+            ))
+
+        # 4. Inyección en Supabase
+        cursor.execute("TRUNCATE TABLE cluster_vulnerabilidad;")
+
+        query_insercion = """
+            INSERT INTO cluster_vulnerabilidad (centroide, radio_metros, cantidad_reportes, nivel_gravedad)
+            VALUES %s
         """
-        score = 0.0
-        factores_riesgo = []
+        execute_values(cursor, query_insercion, zonas_criticas)
+        conn.commit()
 
-        if tiene_adulto_mayor:
-            score += self.PESO_ADULTO_MAYOR
-            factores_riesgo.append("Adulto mayor en el hogar")
+        print(f"Éxito: {len(zonas_criticas)} zonas de vulnerabilidad identificadas e inyectadas.")
 
-        if tiene_movilidad_reducida:
-            score += self.PESO_MOVILIDAD_REDUCIDA
-            factores_riesgo.append("Movilidad reducida / silla de ruedas")
-
-        if es_electrodependiente:
-            score += self.PESO_ELECTRODEPENDIENTE
-            factores_riesgo.append("Dependiente de equipos médicos / electricidad")
-
-        # Si el ascensor falla o hay sismo/incendio, los pisos altos tienen mayor dificultad de evacuación
-        if not ascensor_operativo and piso > 1:
-            penalizacion_piso = (piso - 1) * self.PESO_PISO_SIN_ASCENSOR
-            score += penalizacion_piso
-            factores_riesgo.append(f"Piso {piso} sin acceso a ascensor (+{penalizacion_piso} pts)")
-
-        # Normalizar a un rango máximo de 100
-        score_final = min(100.0, round(score, 1))
-
-        # Determinar nivel de prioridad
-        if score_final >= 70.0:
-            nivel = "CRÍTICO / PRIORIDAD 1"
-            color = "ROJO"
-        elif score_final >= 40.0:
-            nivel = "ALTO / PRIORIDAD 2"
-            color = "AMARILLO"
-        else:
-            nivel = "ESTÁNDAR / PRIORIDAD 3"
-            color = "VERDE"
-
-        return {
-            "departamento": departamento,
-            "piso": piso,
-            "score_vulnerabilidad": score_final,
-            "nivel_prioridad": nivel,
-            "color_semaforo": color,
-            "factores_riesgo": factores_riesgo,
-            "actualizado_en": datetime.now(timezone.utc).isoformat()
-        }
-
-    def generar_hoja_ruta_rescate(
-        self,
-        departamentos: List[Dict[str, Any]],
-        ascensor_operativo: bool = False
-    ) -> List[Dict[str, Any]]:
-        """
-        Ordena la lista de departamentos de mayor a menor vulnerabilidad
-        para que los bomberos y conserjería atiendan primero a quienes más lo necesitan.
-        """
-        resultados = []
-        for depto in departamentos:
-            calculo = self.calcular_indice_departamento(
-                departamento=depto.get("departamento", "N/A"),
-                piso=depto.get("piso", 1),
-                tiene_adulto_mayor=depto.get("tiene_adulto_mayor", False),
-                tiene_movilidad_reducida=depto.get("tiene_movilidad_reducida", False),
-                es_electrodependiente=depto.get("es_electrodependiente", False),
-                ascensor_operativo=ascensor_operativo
-            )
-            resultados.append(calculo)
-
-        # Ordenar descendente por score
-        return sorted(resultados, key=lambda x: x["score_vulnerabilidad"], reverse=True)
-
+    except Exception as e:
+        print(f"Error durante el análisis: {e}")
+    finally:
+        # Aseguramos que la conexión siempre se cierre, incluso si hay errores
+        if 'cursor' in locals() and cursor is not None:
+            cursor.close()
+        if 'conn' in locals() and conn is not None:
+            conn.close()
 
 if __name__ == "__main__":
-    motor = MotorVulnerabilidad()
-    
-    # Simulación comunitaria Edificio Roble (Portal B)
-    censo_comunidad = [
-        {
-            "departamento": "Dpto 4ºA (Carlos Mendoza)",
-            "piso": 4,
-            "tiene_adulto_mayor": True,
-            "tiene_movilidad_reducida": True,
-            "es_electrodependiente": False
-        },
-        {
-            "departamento": "Dpto 302 (Doña Rosa)",
-            "piso": 3,
-            "tiene_adulto_mayor": True,
-            "tiene_movilidad_reducida": False,
-            "es_electrodependiente": False
-        },
-        {
-            "departamento": "Dpto 104 (Jorge L.)",
-            "piso": 1,
-            "tiene_adulto_mayor": False,
-            "tiene_movilidad_reducida": False,
-            "es_electrodependiente": False
-        }
-    ]
-
-    print("--- SIMULACIÓN DE PROTOCOLO DE CRISIS (ASCENSOR INOPERATIVO) ---")
-    hoja_ruta = motor.generar_hoja_ruta_rescate(censo_comunidad, ascensor_operativo=False)
-    for idx, item in enumerate(hoja_ruta, 1):
-        print(f"#{idx} [{item['color_semaforo']}] {item['departamento']} - Score: {item['score_vulnerabilidad']}/100 - {item['nivel_prioridad']}")
-        for factor in item['factores_riesgo']:
-            print(f"    • {factor}")
+    analizar_vulnerabilidad()
