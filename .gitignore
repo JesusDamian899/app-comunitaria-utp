@@ -1,0 +1,16 @@
+# Entornos virtuales de Python y caché
+__pycache__/
+venv/
+env/
+.env
+
+# Dependencias de Frontend (React Native o Flutter)
+node_modules/
+.dart_tool/
+build/
+.pub-cache/
+.packages
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
