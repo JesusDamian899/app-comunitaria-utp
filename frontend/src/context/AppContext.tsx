@@ -17,8 +17,6 @@ interface AppContextType {
   hasConfirmedAttendance: boolean;
   toggleAttendance: () => void;
   attendeesCount: number;
-  scopeFilter: 'portal' | 'edificio' | 'urbanizacion';
-  setScopeFilter: (scope: 'portal' | 'edificio' | 'urbanizacion') => void;
   
   // Tutorial por Módulo
   isTutorialOpen: boolean;
@@ -47,7 +45,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isMobileFrame, setIsMobileFrame] = useState<boolean>(true);
   const [hasConfirmedAttendance, setHasConfirmedAttendance] = useState<boolean>(false);
   const [attendeesCount, setAttendeesCount] = useState<number>(32);
-  const [scopeFilter, setScopeFilter] = useState<'portal' | 'edificio' | 'urbanizacion'>('urbanizacion');
 
   // Control del tutorial por módulo
   const [isTutorialOpen, setIsTutorialOpen] = useState<boolean>(false);
@@ -171,8 +168,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         hasConfirmedAttendance,
         toggleAttendance,
         attendeesCount,
-        scopeFilter,
-        setScopeFilter,
         isTutorialOpen,
         activeTutorialModule,
         openTutorial,

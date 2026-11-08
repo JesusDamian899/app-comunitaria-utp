@@ -89,7 +89,7 @@ export const ConvocatoriaCard = () => {
           <span>
             {hasConfirmedAttendance
               ? '✓ Asistencia Confirmada'
-              : 'Confirmar Asistencia (1 Clic)'}
+              : 'Confirmar Asistencia'}
           </span>
         </button>
       </div>

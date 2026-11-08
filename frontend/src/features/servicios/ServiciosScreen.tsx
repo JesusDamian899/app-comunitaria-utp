@@ -18,6 +18,7 @@ export const ServiciosScreen = () => {
 
   // Estado dinámico de proveedores alineado al modelado oficios_locales y perfiles
   const [providers, setProviders] = useState<ServiceProvider[]>(MOCK_PROVIDERS);
+  const [pendingApprovals, setPendingApprovals] = useState<ServiceProvider[]>([]);
 
   // Estados de modales (Regla de 3 clics)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -116,16 +117,35 @@ export const ServiciosScreen = () => {
             onOpenPublish={() => setIsCreateModalOpen(true)}
           />
 
+          {/* Aviso de publicación pendiente de aprobación (No visible públicamente aún) */}
+          {pendingApprovals.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3 text-amber-900 shadow-2xs animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <span className="text-xl">⏳</span>
+                <div>
+                  <div className="font-extrabold text-xs sm:text-sm">
+                    Tienes {pendingApprovals.length} publicación pendiente de validación por el administrador
+                  </div>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    "{pendingApprovals[0].role}" no será visible para los vecinos hasta que la administración confirme la acreditación y tarifario.
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md shrink-0">
+                En Revisión
+              </span>
+            </div>
+          )}
+
           {/* 4. Encabezado de Sección: "Profesionales de Confianza" */}
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
               <h3 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight">
-                Profesionales de Confianza
+                Vecinos de Confianza
               </h3>
             </div>
             <span className="text-xs text-slate-600 font-bold bg-slate-100 px-2.5 py-1 rounded-full">
-              {filteredProviders.length} disponibles
             </span>
           </div>
 
@@ -158,6 +178,9 @@ export const ServiciosScreen = () => {
             isOpen={isCreateModalOpen}
             onClose={() => setIsCreateModalOpen(false)}
             onServiceCreated={handleServiceCreated}
+            onServiceSubmittedPending={(newService) => {
+              setPendingApprovals((prev) => [newService, ...prev]);
+            }}
           />
 
           {/* Modal 2: Recomendar Profesional (perfiles.vistos_buenos) */}

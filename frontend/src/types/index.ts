@@ -4,6 +4,12 @@ export interface UserProfile {
   id: string;
   name: string;
   role: string;
+  urbanizacion: string;
+  sector: string;
+  calle: string;
+  numero: string;
+  servicePin: string; // PIN de 4 dígitos para validar servicios otorgados
+  // Propiedades de retrocompatibilidad
   building: string;
   portal: string;
   apartment: string;
@@ -50,6 +56,18 @@ export interface ActaAviso {
   previewText: string;
 }
 
+export type ServiceCategoryType =
+  | 'todos'
+  | 'alimentacion'
+  | 'mantenimiento_hogar'
+  | 'salud_bienestar'
+  | 'compras_bazar'
+  | 'servicios_tramites'
+  | 'vehiculos_mascotas'
+  | 'otros';
+
+export type TipoActividadServicio = 'profesion' | 'oficio';
+
 export interface ServiceReview {
   id: string;
   author: string;
@@ -67,21 +85,56 @@ export interface ServiceProvider {
   avatarUrl: string;
   recommendationsCount: number;
   specialtyDetails: string;
-  category: 'fontaneria' | 'electricidad' | 'cerrajeria' | 'hogar';
+  category: ServiceCategoryType;
+  tipoActividad: TipoActividadServicio; // 'profesion' (requiere verificación) | 'oficio' (sin verificación, avalado por vistos buenos)
+  colegiatura?: string; // Ej: CEP #48291, CAL #71204
+  verified: boolean; // true ÚNICAMENTE para personas con profesión
+  servicePin?: string; // PIN de 4 dígitos para que el cliente valide la recomendación
   reviews: ServiceReview[];
   phone: string;
 }
 
+export type SolidaridadEstado = 'disponible' | 'ayuda_solicitada' | 'recibido';
+
+// Categorías oficiales de Solidaridad: PRESTAMO, DONACION, ACOMPAÑAMIENTO, INTERCAMBIO HABILIDADES
+export type SolidaridadCategory =
+  | 'prestamo'
+  | 'donacion'
+  | 'acompanamiento'
+  | 'intercambio_habilidades';
+
+// Niveles de Gamificación / Estatus Comunitario
+export type CommunityStatusLevel = 'bronce' | 'plata' | 'oro' | 'heroe_del_barrio';
+
+export interface CommunityNeighborRanking {
+  id: string;
+  name: string;
+  avatarUrl: string;
+  calle: string;
+  numero: string;
+  favoresCount: number;
+  level: CommunityStatusLevel;
+  badgeTitle: string; // 'Bronce' | 'Plata' | 'Oro' | 'Héroe del barrio'
+  position: 1 | 2 | 3;
+  destacadoPor: string;
+}
+
 export interface SolidaridadFavor {
   id: string;
-  type: 'prestamo' | 'peticion' | 'acompanamiento';
+  type: SolidaridadCategory | 'peticion' | string;
+  categoria?: SolidaridadCategory;
   badgeTag: string;
   badgeTime: string;
   title: string;
+  description?: string; // Descripción del favor o artículo
   ownerName: string;
+  ownerAvatarUrl?: string;
   location: string;
+  phone?: string;
   actionButtonText: string;
-  iconName: 'wrench' | 'plant' | 'users' | 'heart';
+  iconName: 'wrench' | 'plant' | 'users' | 'heart' | 'gift' | 'arrow-left-right' | 'sparkles' | 'award';
+  estado?: SolidaridadEstado;
+  donorBadgeLevel?: CommunityStatusLevel;
 }
 
 export interface EmergencyDirectCall {

@@ -17,6 +17,9 @@ export const GlobalCrisisBanner = () => {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-90"></span>
             <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-300"></span>
           </span>
+          <p className="text-xs sm:text-sm font-black tracking-wide leading-tight">
+            🚨 ALERTA GENERAL: PROTOCOLO DE EMERGENCIA ACTIVO EN URB. LAS PALMERAS (SECTOR CALLES)
+          </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

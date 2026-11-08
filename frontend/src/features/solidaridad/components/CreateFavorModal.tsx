@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { X, Wrench, Sprout, Users, Sparkles } from 'lucide-react';
+import { X, Wrench, Gift, Users, Sparkles } from 'lucide-react';
 import { useApp } from '../../../context/AppContext';
 import { CURRENT_USER } from '../../../mock/data';
-import type { SolidaridadFavor } from '../../../types';
+import type { SolidaridadFavor, SolidaridadCategory } from '../../../types';
 
 interface CreateFavorModalProps {
   isOpen: boolean;
@@ -12,37 +12,37 @@ interface CreateFavorModalProps {
 
 const TIPO_SOLICITUDES = [
   {
-    id: 'prestamo',
-    label: 'Ofrecer Préstamo',
+    id: 'prestamo' as SolidaridadCategory,
+    label: 'Préstamo',
     tag: 'Préstamo disponible',
     actionText: 'Pedir prestado',
     icon: Wrench,
-    iconName: 'wrench' as const,
+    iconName: 'wrench' as const
   },
   {
-    id: 'peticion',
-    label: 'Pedir Ayuda / Favor',
-    tag: 'Petición solidaria',
-    actionText: 'Ofrecer ayuda',
-    icon: Sprout,
-    iconName: 'plant' as const,
+    id: 'donacion' as SolidaridadCategory,
+    label: 'Donación',
+    tag: 'Donación solidaria',
+    actionText: 'Solicitar donación',
+    icon: Gift,
+    iconName: 'gift' as const
   },
   {
-    id: 'acompanamiento',
+    id: 'acompanamiento' as SolidaridadCategory,
     label: 'Acompañamiento',
     tag: 'Acompañamiento',
     actionText: 'Ofrecer apoyo',
     icon: Users,
-    iconName: 'users' as const,
+    iconName: 'users' as const
   },
-];
-
-const PRESET_TITLES = [
-  'Escalera de aluminio tijera',
-  'Taladro percutor con brocas',
-  'Cuidado de plantas el fin de semana',
-  'Acompañamiento a centro de salud',
-  'Préstamo de mesa plegable y sillas',
+  {
+    id: 'intercambio_habilidades' as SolidaridadCategory,
+    label: 'Intercambio Habilidades',
+    tag: 'Intercambio Habilidades',
+    actionText: 'Intercambiar habilidad',
+    icon: Sparkles,
+    iconName: 'sparkles' as const
+  },
 ];
 
 export const CreateFavorModal = ({
@@ -52,11 +52,15 @@ export const CreateFavorModal = ({
 }: CreateFavorModalProps) => {
   const { showToast } = useApp();
 
-  const [selectedTipo, setSelectedTipo] = useState<string>('prestamo');
+  const [selectedTipo, setSelectedTipo] = useState<SolidaridadCategory>('prestamo');
   const [titulo, setTitulo] = useState<string>('');
+  const [descripcion, setDescripcion] = useState<string>('');
   const [tiempo] = useState<string>('Hoy');
 
   if (!isOpen) return null;
+
+  const currentTipoConfig =
+    TIPO_SOLICITUDES.find((t) => t.id === selectedTipo) || TIPO_SOLICITUDES[0];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,19 +70,24 @@ export const CreateFavorModal = ({
       return;
     }
 
-    const currentTipoConfig = TIPO_SOLICITUDES.find((t) => t.id === selectedTipo) || TIPO_SOLICITUDES[0];
-
-    // Nuevo registro alineado al modelo de datos muro_solidario
+    // Nuevo registro en Muro Solidario
     const newFavor: SolidaridadFavor = {
       id: `fav-${Date.now()}`,
-      type: (selectedTipo as 'prestamo' | 'peticion' | 'acompanamiento'),
+      type: selectedTipo,
+      categoria: selectedTipo,
       badgeTag: currentTipoConfig.tag,
       badgeTime: tiempo,
       title: titulo,
-      ownerName: `${CURRENT_USER.name} (${CURRENT_USER.portal}, ${CURRENT_USER.apartment})`,
-      location: `Publicado por ${CURRENT_USER.name} (${CURRENT_USER.apartment})`,
+      description:
+        descripcion.trim() ||
+        `${titulo}. Disponible para vecinos de la comunidad. Coordinar entrega de forma directa.`,
+      ownerName: CURRENT_USER.name,
+      ownerAvatarUrl: CURRENT_USER.avatarUrl,
+      location: `${CURRENT_USER.calle} ${CURRENT_USER.numero} (${CURRENT_USER.sector})`,
       actionButtonText: currentTipoConfig.actionText,
       iconName: currentTipoConfig.iconName,
+      estado: 'disponible',
+      donorBadgeLevel: 'plata',
     };
 
     onFavorCreated(newFavor);
@@ -103,9 +112,6 @@ export const CreateFavorModal = ({
               <h3 className="font-extrabold text-sm sm:text-base text-slate-900 leading-tight">
                 Publicar en Muro Solidario
               </h3>
-              <p className="text-[11px] text-slate-400">
-                Regla de 3 clics • Modelo muro_solidario
-              </p>
             </div>
           </div>
 
@@ -120,14 +126,13 @@ export const CreateFavorModal = ({
 
         {/* Formulario (Regla de los 3 clics) */}
         <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4">
-          {/* Clic 1: Seleccionar Tipo de Solicitud (campo obligatorio en muro_solidario) */}
+          {/* Clic 1: Seleccionar Categoría (PRESTAMO, DONACION, ACOMPAÑAMIENTO, INTERCAMBIO HABILIDADES) */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-              <span>1. Tipo de Solicitud</span>
-              <span className="text-[10px] text-blue-600 font-semibold">Clic 1</span>
+              <span>Categoría de Solidaridad</span>
             </label>
 
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 gap-2">
               {TIPO_SOLICITUDES.map(({ id, label, icon: Icon }) => {
                 const isSelected = selectedTipo === id;
                 return (
@@ -135,47 +140,46 @@ export const CreateFavorModal = ({
                     key={id}
                     type="button"
                     onClick={() => setSelectedTipo(id)}
-                    className={`py-2 px-2 rounded-xl text-xs font-bold flex flex-col items-center gap-1 border transition-all text-center cursor-pointer ${
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-2 border transition-all text-left cursor-pointer ${
                       isSelected
                         ? 'bg-[#172554] text-white border-[#172554] shadow-xs'
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     <Icon className="w-4 h-4 shrink-0" />
-                    <span className="text-[11px] leading-tight">{label}</span>
+                    <span className="text-xs leading-tight font-extrabold">{label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Clic 2: ¿Qué necesitas o qué prestas? (con sugerencias de 1 toque) */}
+          {/* Clic 2: ¿Qué necesitas o qué ofreces? */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-              <span>2. Descripción o artículo</span>
-              <span className="text-[10px] text-slate-400">Clic 2 o escribe libremente</span>
+              <span>Título del favor o artículo</span>
             </label>
-
-            {/* Sugerencias de 1 toque */}
-            <div className="flex flex-wrap gap-1.5 pb-1">
-              {PRESET_TITLES.map((preset, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setTitulo(preset)}
-                  className="text-[10px] bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 px-2 py-1 rounded-lg border border-slate-200/60 transition-colors cursor-pointer"
-                >
-                  + {preset}
-                </button>
-              ))}
-            </div>
 
             <input
               type="text"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ej: Escalera de tijera, taladro, regar macetas..."
+              placeholder="Ej: Escalera de tijera, taladro, libros de secundaria..."
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Descripción detallada opcional */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+              <span>Descripción detallada</span>
+            </label>
+            <textarea
+              rows={2}
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              placeholder="Ej: En buen estado, se presta por 24 horas. Entrega en mano..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white transition-all resize-none"
             />
           </div>
 
@@ -185,7 +189,7 @@ export const CreateFavorModal = ({
               type="submit"
               className="w-full py-3 px-4 bg-[#172554] hover:bg-blue-900 active:scale-[0.99] text-white rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 shadow-md shadow-blue-950/20 cursor-pointer transition-all"
             >
-              <span>3. Publicar en el Muro (1 Clic)</span>
+              <span>Publicar en el Muro</span>
             </button>
           </div>
         </form>
