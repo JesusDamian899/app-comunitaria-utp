@@ -78,9 +78,9 @@ const TOUR_STEPS: TourStep[] = [
       const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
       return {
         x: tabWidth * 1 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
+        y: SCREEN_HEIGHT - bottomPadding - 48,
         width: tabWidth - 4,
-        height: 50,
+        height: 52,
         borderRadius: 14,
         shape: 'rect',
       };
@@ -103,9 +103,9 @@ const TOUR_STEPS: TourStep[] = [
       const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
       return {
         x: tabWidth * 2 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
+        y: SCREEN_HEIGHT - bottomPadding - 48,
         width: tabWidth - 4,
-        height: 50,
+        height: 52,
         borderRadius: 14,
         shape: 'rect',
       };
@@ -128,9 +128,9 @@ const TOUR_STEPS: TourStep[] = [
       const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
       return {
         x: tabWidth * 3 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
+        y: SCREEN_HEIGHT - bottomPadding - 48,
         width: tabWidth - 4,
-        height: 50,
+        height: 52,
         borderRadius: 14,
         shape: 'rect',
       };
@@ -297,7 +297,7 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
   const cardWidth = Math.min(SCREEN_WIDTH - 28, 420);
   const cardStyle = step.cardPlacement === 'below'
     ? { top: Math.min(target.y + target.height + 20, SCREEN_HEIGHT - 320) }
-    : { bottom: Math.min(SCREEN_HEIGHT - target.y + 16, SCREEN_HEIGHT - 120) };
+    : { bottom: Math.min(SCREEN_HEIGHT - target.y + 44, SCREEN_HEIGHT - 120) };
 
   // Posicionamiento dinámico del puntero emoji
   const renderPointer = () => {
@@ -326,7 +326,7 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
           style={[
             styles.pointerBox,
             {
-              top: target.y - 38,
+              top: target.y - 36,
               left: target.x + target.width / 2 - 15,
               transform: [{ translateY: bounceAnim }],
             },
@@ -344,7 +344,7 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
         style={[
           styles.pointerBox,
           {
-            top: target.y - 38,
+            top: target.y - 34,
             left: target.x + target.width / 2 - 15,
             transform: [{ translateY: bounceAnim }],
           },
@@ -535,7 +535,9 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
                   onPress={handlePrev}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.backButtonText}>← Anterior</Text>
+                  <Text style={styles.backButtonText} numberOfLines={1}>
+                    ← Atrás
+                  </Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -543,7 +545,7 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
                   styles.nextButton,
                   {
                     backgroundColor: step.badgeColor,
-                    flex: currentStepIdx > 0 ? 1 : undefined,
+                    flex: currentStepIdx > 0 ? 1.4 : undefined,
                     width: currentStepIdx === 0 ? '100%' : undefined,
                   },
                 ]}
@@ -551,7 +553,7 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
                 activeOpacity={0.85}
               >
                 <Text style={styles.nextButtonText} numberOfLines={1}>
-                  {isLast ? '¡Comenzar ahora! 🚀' : 'Siguiente paso →'}
+                  {isLast ? '¡Comenzar! 🚀' : 'Siguiente →'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -639,6 +641,7 @@ const styles = StyleSheet.create({
     zIndex: 350,
   },
   card: {
+    width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 22,
     padding: 18,
@@ -650,6 +653,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 16,
     elevation: 16,
+    overflow: 'hidden',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -743,26 +747,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    width: '100%',
   },
   backButton: {
-    paddingHorizontal: 14,
+    flex: 1,
+    paddingHorizontal: 8,
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#cbd5e1',
     backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
   },
   backButtonText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '800',
     color: '#475569',
   },
   nextButton: {
-    paddingVertical: 11,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 0,
+    flexShrink: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -773,5 +784,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '900',
+    textAlign: 'center',
   },
 });

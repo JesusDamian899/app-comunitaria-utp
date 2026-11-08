@@ -33,8 +33,9 @@ function MainNavigator() {
   useEffect(() => {
     const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
     const tabWidth = SCREEN_WIDTH / 5;
-    const tabY = SCREEN_HEIGHT - bottomBarHeight + 2;
-    const tabH = 50;
+    // Bajamos 6px la posición Y y aumentamos la altura a 52px para dar margen perfecto al texto inferior
+    const tabY = SCREEN_HEIGHT - bottomBarHeight + 8;
+    const tabH = 52;
 
     registerTutorialTarget('step-servicios', {
       x: tabWidth * 1 + 2,
