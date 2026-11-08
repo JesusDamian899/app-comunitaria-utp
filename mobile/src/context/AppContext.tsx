@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { NavigationTab } from '../types';
+import { getSQLiteKeyValue, setSQLiteKeyValue } from '../lib/sqliteDatabase';
 
 export interface CustomAviso {
   id: string;
@@ -74,6 +75,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [isAvisoModalOpen, setIsAvisoModalOpen] = useState<boolean>(false);
   const [customAvisos, setCustomAvisos] = useState<CustomAviso[]>([]);
 
+  // Carga inicial de persistencia SQLite / AsyncStorage
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const [savedAttendance, savedAttendees, savedCrisis, savedSafety, savedSos] = await Promise.all([
+          getSQLiteKeyValue<boolean>('asamblea_asistencia_confirmada', false),
+          getSQLiteKeyValue<number>('asamblea_asistentes_count', 32),
+          getSQLiteKeyValue<boolean>('crisis_real_activa', false),
+          getSQLiteKeyValue<'none' | 'safe' | 'needs_rescue'>('user_safety_status', 'none'),
+          getSQLiteKeyValue<boolean>('sos_alerta_enviada', false),
+        ]);
+        if (isMounted) {
+          setHasConfirmedAttendance(savedAttendance);
+          setAttendeesCount(savedAttendees);
+          setIsCrisisRealActive(savedCrisis);
+          setUserSafetyStatus(savedSafety);
+          setIsSosAlertSent(savedSos);
+        }
+      } catch (e) {
+        console.warn('Error cargando estados clave-valor:', e);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -115,6 +144,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const toggleSosAlert = () => {
     setIsSosAlertSent((prev) => {
       const next = !prev;
+      setSQLiteKeyValue('sos_alerta_enviada', next);
       showToast(next ? '¡Alerta de Pánico Despachada a Central!' : 'Alerta SOS desactivada');
       return next;
     });
@@ -123,7 +153,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const toggleCrisisRealMode = () => {
     setIsCrisisRealActive((prev) => {
       const next = !prev;
+      setSQLiteKeyValue('crisis_real_activa', next);
       setUserSafetyStatus('none');
+      setSQLiteKeyValue('user_safety_status', 'none');
       showToast(
         next
           ? '🚨 Modo Crisis Comunitaria Activado (Múltiples Bloques)'
@@ -133,10 +165,25 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const handleSetIsCrisisRealActive = (active: boolean) => {
+    setIsCrisisRealActive(active);
+    setSQLiteKeyValue('crisis_real_activa', active);
+  };
+
+  const handleSetUserSafetyStatus = (status: 'none' | 'safe' | 'needs_rescue') => {
+    setUserSafetyStatus(status);
+    setSQLiteKeyValue('user_safety_status', status);
+  };
+
   const toggleAttendance = () => {
     setHasConfirmedAttendance((prev) => {
       const next = !prev;
-      setAttendeesCount((c) => (next ? c + 1 : c - 1));
+      setAttendeesCount((c) => {
+        const nextCount = next ? c + 1 : c - 1;
+        setSQLiteKeyValue('asamblea_asistentes_count', nextCount);
+        return nextCount;
+      });
+      setSQLiteKeyValue('asamblea_asistencia_confirmada', next);
       showToast(next ? '¡Asistencia confirmada para la asamblea!' : 'Asistencia cancelada');
       return next;
     });
@@ -158,10 +205,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         toggleAttendance,
         attendeesCount,
         isCrisisRealActive,
-        setIsCrisisRealActive,
+        setIsCrisisRealActive: handleSetIsCrisisRealActive,
         toggleCrisisRealMode,
         userSafetyStatus,
-        setUserSafetyStatus,
+        setUserSafetyStatus: handleSetUserSafetyStatus,
         isTutorialOpen,
         openTutorial,
         closeTutorial,
@@ -184,7 +231,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
+    throw new Error('useApp debe usarse dentro de un AppProvider');
   }
   return context;
 };
