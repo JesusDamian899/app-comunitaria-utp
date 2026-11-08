@@ -4,9 +4,12 @@ import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { MOCK_TOP_VECINOS_DEL_MES, MOCK_CONVOCATORIA, MOCK_MANTENIMIENTO, MOCK_ACTA } from '../mock/data';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../components/AuthGuard';
 
 export const InicioScreen = () => {
   const { hasConfirmedAttendance, toggleAttendance, attendeesCount, showToast } = useApp();
+  const { currentUser } = useAuth();
+  const firstName = currentUser.name.split(' ')[0] || currentUser.name;
 
   const first = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 1);
   const second = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 2);
@@ -21,8 +24,8 @@ export const InicioScreen = () => {
       {/* Saludo y Acción Rápida */}
       <View style={styles.welcomeRow}>
         <View style={styles.welcomeLeft}>
-          <Text style={styles.welcomeSubtitle}>Comunidad Residencial</Text>
-          <Text style={styles.welcomeTitle}>¡Hola, Carlos! 👋</Text>
+          <Text style={styles.welcomeSubtitle}>{currentUser.urbanizacion}</Text>
+          <Text style={styles.welcomeTitle}>¡Hola, {firstName}! 👋</Text>
         </View>
         <TouchableOpacity 
           style={styles.avisoButton} 

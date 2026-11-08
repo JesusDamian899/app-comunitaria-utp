@@ -11,11 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import type { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 
 interface AuthScreenProps {
   onDemoLogin: () => void;
-  onAuthenticated: () => void;
+  onAuthenticated: (user?: User) => Promise<void> | void;
 }
 
 export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) => {
@@ -58,7 +59,7 @@ export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) =>
     try {
       if (isRegistering) {
         const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -71,19 +72,38 @@ export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) =>
               calle: calle.trim(),
               numero: numero.trim(),
               service_pin: generatedPin,
+              vistos_buenos: 0,
+              favores_realizados: 1,
             },
           },
         });
         if (error) throw error;
-        setInfoMsg(`¡Cuenta creada! Tu PIN de servicios es ${generatedPin}. Ahora inicia sesión.`);
+
+        if (data.user) {
+          await supabase.from('perfiles').upsert({
+            id: data.user.id,
+            nombre: nombre.trim(),
+            telefono: telefono.trim(),
+            rol,
+            urbanizacion: urbanizacion.trim(),
+            sector: sector.trim(),
+            calle: calle.trim(),
+            numero: numero.trim(),
+            service_pin: generatedPin,
+            vistos_buenos: 0,
+            favores_realizados: 1,
+          });
+        }
+
+        setInfoMsg(`¡Cuenta creada para ${nombre.trim()}! Tu PIN de servicios es ${generatedPin}. Ahora inicia sesión.`);
         setIsRegistering(false);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
         if (error) throw error;
-        onAuthenticated();
+        await onAuthenticated(data.user ?? undefined);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Ocurrió un error al autenticar.');

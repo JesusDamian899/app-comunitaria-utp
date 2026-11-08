@@ -18,9 +18,10 @@ import {
   FontAwesome5, 
   MaterialCommunityIcons 
 } from '@expo/vector-icons';
-import { MOCK_PROVIDERS, CURRENT_USER } from '../mock/data';
+import { MOCK_PROVIDERS } from '../mock/data';
 import type { ServiceProvider, ServiceCategoryType } from '../types';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../components/AuthGuard';
 
 const CATEGORIES: { id: ServiceCategoryType; label: string; icon: string }[] = [
   { id: 'todos', label: 'Todos', icon: 'apps' },
@@ -35,6 +36,7 @@ const CATEGORIES: { id: ServiceCategoryType; label: string; icon: string }[] = [
 
 export const ServiciosScreen = () => {
   const { showToast } = useApp();
+  const { currentUser } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategoryType>('todos');
@@ -59,16 +61,24 @@ export const ServiciosScreen = () => {
   const [newDesc, setNewDesc] = useState('');
 
   const filteredProviders = useMemo(() => {
-    return providers.filter((p) => {
-      const matchesCat = selectedCategory === 'todos' || p.category === selectedCategory;
-      const q = searchQuery.toLowerCase().trim();
-      const matchesQ =
-        q === '' ||
-        p.name.toLowerCase().includes(q) ||
-        p.role.toLowerCase().includes(q) ||
-        p.specialtyDetails.toLowerCase().includes(q);
-      return matchesCat && matchesQ;
-    });
+    return providers
+      .filter((p) => {
+        const matchesCat = selectedCategory === 'todos' || p.category === selectedCategory;
+        const q = searchQuery.toLowerCase().trim();
+        const matchesQ =
+          q === '' ||
+          p.name.toLowerCase().includes(q) ||
+          p.role.toLowerCase().includes(q) ||
+          p.specialtyDetails.toLowerCase().includes(q);
+        return matchesCat && matchesQ;
+      })
+      .sort((a, b) => {
+        // Nivel 3: Profesionales de Confianza (15+ Vistos Buenos) aparecen primero en el directorio
+        const aTop = a.recommendationsCount >= 15 ? 1 : 0;
+        const bTop = b.recommendationsCount >= 15 ? 1 : 0;
+        if (bTop !== aTop) return bTop - aTop;
+        return b.recommendationsCount - a.recommendationsCount;
+      });
   }, [providers, searchQuery, selectedCategory]);
 
   const handleOpenWhatsapp = (provider: ServiceProvider) => {
@@ -92,7 +102,7 @@ export const ServiciosScreen = () => {
     }
   };
 
-    const handleSubmitRecommendation = () => {
+  const handleSubmitRecommendation = () => {
     if (!recommendingProvider) return;
     if (thumbsRating === null) {
       showToast('Selecciona si recomiendas o no el servicio.');
@@ -141,22 +151,22 @@ export const ServiciosScreen = () => {
     // Agregamos el servicio al directorio con los datos y el PIN real del usuario logueado
     const nuevoServicio: ServiceProvider = {
       id: `prov-${Date.now()}`,
-      name: CURRENT_USER.name,
+      name: currentUser.name,
       experience: 'Vecino activo',
       role: newTitle.trim(),
-      location: `${CURRENT_USER.calle} ${CURRENT_USER.numero} (${CURRENT_USER.sector})`,
+      location: `${currentUser.calle} ${currentUser.numero} (${currentUser.sector})`,
       avatarUrl:
-        CURRENT_USER.avatarUrl ||
+        currentUser.avatarUrl ||
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-      recommendationsCount: 0,
+      recommendationsCount: currentUser.vistosBuenos ?? 0,
       specialtyDetails: `${newDesc.trim() || newTitle.trim()} • Tarifa vecinal: S/. ${tarifaNum || 30}`,
       category: selectedCategory === 'todos' ? 'mantenimiento_hogar' : selectedCategory,
       tipoActividad: newTipo,
       colegiatura: newTipo === 'profesion' ? newColegiatura.trim() : undefined,
-      verified: newTipo === 'profesion',
-      servicePin: CURRENT_USER.servicePin || '4826',
+      verified: newTipo === 'profesion' || (currentUser.vistosBuenos ?? 0) >= 5,
+      servicePin: currentUser.servicePin || '4826',
       reviews: [],
-      phone: CURRENT_USER.phone,
+      phone: currentUser.phone,
     };
 
     setProviders((prev) => [nuevoServicio, ...prev]);
@@ -256,6 +266,9 @@ export const ServiciosScreen = () => {
       {/* Directorio de Proveedores */}
       {filteredProviders.map((provider) => {
         const isProfesion = provider.tipoActividad === 'profesion';
+        const showBlueCheck = isProfesion || provider.recommendationsCount >= 5;
+        const isTopTrust = provider.recommendationsCount >= 15;
+        const isMidTrust = provider.recommendationsCount >= 5 && provider.recommendationsCount < 15;
         const hasContacted = contactedMap[provider.id];
         const firstName = provider.name.split(' ')[0] || provider.name;
 
@@ -267,7 +280,7 @@ export const ServiciosScreen = () => {
                 <View style={styles.providerInfo}>
                   <View style={styles.providerNameRow}>
                     <Text style={styles.providerName} numberOfLines={1}>{provider.name}</Text>
-                    {isProfesion && (
+                    {showBlueCheck && (
                       <Ionicons name="checkmark-circle" size={16} color="#2563eb" />
                     )}
                   </View>
@@ -280,12 +293,32 @@ export const ServiciosScreen = () => {
               </View>
             </View>
 
-            {/* Visto bueno */}
+            {/* Visto bueno según Niveles de Confianza (Nivel 1: 0-4, Nivel 2: 5-14, Nivel 3: 15+) */}
             <View style={styles.vistoBuenoRow}>
-              <View style={styles.vistoBuenoBadge}>
-                <Ionicons name="thumbs-up" size={13} color="#2563eb" />
-                <Text style={styles.vistoBuenoText}>
-                  Visto Bueno ({provider.recommendationsCount} recomiendan)
+              <View
+                style={[
+                  styles.vistoBuenoBadge,
+                  isTopTrust && { backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' },
+                  !isTopTrust && !isMidTrust && { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' },
+                ]}
+              >
+                <Ionicons
+                  name={isTopTrust ? 'shield-checkmark' : 'thumbs-up'}
+                  size={13}
+                  color={isTopTrust ? '#15803d' : isMidTrust ? '#2563eb' : '#64748b'}
+                />
+                <Text
+                  style={[
+                    styles.vistoBuenoText,
+                    isTopTrust && { color: '#15803d' },
+                    !isTopTrust && !isMidTrust && { color: '#475569' },
+                  ]}
+                >
+                  {isTopTrust
+                    ? `Confianza Ganada (${provider.recommendationsCount} Vistos Buenos)`
+                    : isMidTrust
+                    ? `Vecino Confiable (${provider.recommendationsCount} Vistos Buenos)`
+                    : `Vecino Nuevo (${provider.recommendationsCount} Vistos Buenos)`}
                 </Text>
               </View>
             </View>

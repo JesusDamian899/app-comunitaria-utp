@@ -23,6 +23,8 @@ export const CURRENT_USER: UserProfile = {
   apartment: '420',
   phone: '998 765 432',
   verified: true,
+  vistosBuenos: 18,
+  favoresCount: 7,
   servicePin: '4826', // PIN de 4 dígitos visible en el perfil para validar servicios
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
 };

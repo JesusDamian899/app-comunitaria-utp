@@ -1,13 +1,59 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { CURRENT_USER } from '../mock/data';
 import { CommunityBadge } from '../components/CommunityBadge';
-import { useAuth } from '../components/AuthGuard';
+import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
 
 export const PerfilScreen = () => {
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const [showGuideModal, setShowGuideModal] = useState(false);
+
+  const vistosBuenos = currentUser.vistosBuenos ?? 0;
+  const favoresCount = currentUser.favoresCount ?? 1;
+
+  // Regla de Niveles de Confianza (Nivel 1: 0-4, Nivel 2: 5-14, Nivel 3: 15+)
+  const showVerifiedCheck = vistosBuenos >= 5 || currentUser.verified;
+  const trustConfig =
+    vistosBuenos >= 15
+      ? {
+          label: `Confianza Ganada (${vistosBuenos} Vistos Buenos)`,
+          bg: '#f0fdf4',
+          border: '#bbf7d0',
+          color: '#15803d',
+          icon: 'shield-checkmark' as const,
+        }
+      : vistosBuenos >= 5
+      ? {
+          label: `Vecino Confiable (${vistosBuenos} Vistos Buenos)`,
+          bg: '#eff6ff',
+          border: '#bfdbfe',
+          color: '#1d4ed8',
+          icon: 'checkmark-circle' as const,
+        }
+      : {
+          label: `Vecino Nuevo (${vistosBuenos} Vistos Buenos)`,
+          bg: '#f1f5f9',
+          border: '#e2e8f0',
+          color: '#475569',
+          icon: 'person-outline' as const,
+        };
+
+  // Regla de Gamificación / Incentivos en Solidaridad (Bronce, Plata, Oro, Héroe del barrio)
+  const badgeLevel = getCommunityStatusLevel(favoresCount);
+  const nextGoal =
+    badgeLevel === 'bronce'
+      ? { target: 5, nextLabel: 'PLATA' }
+      : badgeLevel === 'plata'
+      ? { target: 10, nextLabel: 'ORO' }
+      : badgeLevel === 'oro'
+      ? { target: 20, nextLabel: 'HÉROE DEL BARRIO' }
+      : null;
+
+  const progressPercent = nextGoal
+    ? Math.min(100, Math.round((favoresCount / nextGoal.target) * 100))
+    : 100;
+  const remainingFavores = nextGoal ? Math.max(0, nextGoal.target - favoresCount) : 0;
+
   return (
     <ScrollView 
       style={styles.container} 
@@ -18,28 +64,37 @@ export const PerfilScreen = () => {
       <View style={styles.profileHeaderCard}>
         <View style={styles.avatarRow}>
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.avatar} />
-            <View style={styles.verifiedCheck}>
-              <Ionicons name="checkmark" size={12} color="#ffffff" />
-            </View>
+            <Image source={{ uri: currentUser.avatarUrl }} style={styles.avatar} />
+            {showVerifiedCheck && (
+              <View style={styles.verifiedCheck}>
+                <Ionicons name="checkmark" size={12} color="#ffffff" />
+              </View>
+            )}
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>{CURRENT_USER.name}</Text>
-            <Text style={styles.userRole}>{CURRENT_USER.role}</Text>
+            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Text style={styles.userRole}>{currentUser.role}</Text>
 
-            <View style={styles.vistosBuenosChip}>
-              <Ionicons name="shield-checkmark" size={13} color="#15803d" />
-              <Text style={styles.vistosBuenosText}>Confianza (18 Vistos Buenos)</Text>
+            <View
+              style={[
+                styles.vistosBuenosChip,
+                { backgroundColor: trustConfig.bg, borderColor: trustConfig.border },
+              ]}
+            >
+              <Ionicons name={trustConfig.icon} size={13} color={trustConfig.color} />
+              <Text style={[styles.vistosBuenosText, { color: trustConfig.color }]}>
+                {trustConfig.label}
+              </Text>
             </View>
           </View>
         </View>
 
         <View style={styles.addressBox}>
           <Text style={styles.addressText}>
-            📍 {CURRENT_USER.urbanizacion} • {CURRENT_USER.calle} {CURRENT_USER.numero} ({CURRENT_USER.sector})
+            📍 {currentUser.urbanizacion} • {currentUser.calle} {currentUser.numero} ({currentUser.sector})
           </Text>
-          <Text style={styles.phoneText}>📞 {CURRENT_USER.phone}</Text>
+          <Text style={styles.phoneText}>📞 {currentUser.phone}</Text>
         </View>
       </View>
 
@@ -58,7 +113,7 @@ export const PerfilScreen = () => {
         </View>
 
         <View style={styles.pinBadge}>
-          <Text style={styles.pinDigits}>{CURRENT_USER.servicePin || '4826'}</Text>
+          <Text style={styles.pinDigits}>{currentUser.servicePin || '4826'}</Text>
         </View>
       </View>
 
@@ -69,16 +124,22 @@ export const PerfilScreen = () => {
             <MaterialCommunityIcons name="trophy-award" size={22} color="#b45309" />
             <Text style={styles.gamificationTitle}>Mi Estatus Comunitario</Text>
           </View>
-          <CommunityBadge level="plata" size="sm" />
+          <CommunityBadge level={badgeLevel} size="sm" />
         </View>
 
-        <Text style={styles.gamificationScore}>
-          Has completado <Text style={styles.boldScore}>7 favores</Text> este mes. ¡Estás a 3 favores de alcanzar el nivel <Text style={styles.boldGold}>ORO</Text>!
-        </Text>
+        {nextGoal ? (
+          <Text style={styles.gamificationScore}>
+            Has completado <Text style={styles.boldScore}>{favoresCount} {favoresCount === 1 ? 'favor' : 'favores'}</Text> este mes. ¡Estás a {remainingFavores} {remainingFavores === 1 ? 'favor' : 'favores'} de alcanzar el nivel <Text style={styles.boldGold}>{nextGoal.nextLabel}</Text>!
+          </Text>
+        ) : (
+          <Text style={styles.gamificationScore}>
+            ¡Felicidades! Has completado <Text style={styles.boldScore}>{favoresCount} favores</Text> y alcanzaste el máximo rango de <Text style={styles.boldGold}>HÉROE DEL BARRIO</Text>.
+          </Text>
+        )}
 
         {/* Barra de Progreso */}
         <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, { width: '70%' }]} />
+          <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
         </View>
 
         {/* Niveles oficiales de estatus */}

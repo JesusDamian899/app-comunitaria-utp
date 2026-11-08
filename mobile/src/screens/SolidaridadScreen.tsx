@@ -18,10 +18,11 @@ import {
   MaterialCommunityIcons, 
   MaterialIcons 
 } from '@expo/vector-icons';
-import { MOCK_FAVORES, CURRENT_USER } from '../mock/data';
+import { MOCK_FAVORES } from '../mock/data';
 import type { SolidaridadFavor, SolidaridadCategory } from '../types';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
+import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
 
 export type SolidaridadFilterType = 'todos' | SolidaridadCategory;
 
@@ -35,6 +36,7 @@ const CATEGORIES: { id: SolidaridadFilterType; label: string; icon: string }[] =
 
 export const SolidaridadScreen = () => {
   const { showToast } = useApp();
+  const { currentUser, addFavorCompleted } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SolidaridadFilterType>('todos');
@@ -87,8 +89,9 @@ export const SolidaridadScreen = () => {
     setFavores((prev) =>
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'recibido' } : item))
     );
+    addFavorCompleted();
     // Notificación directa sin popups emergentes (presunción de confianza vecinal)
-    showToast(`${CURRENT_USER.name} confirmó tu ayuda. ¡Gracias por aportar al barrio!`);
+    showToast(`${currentUser.name} confirmó tu ayuda. ¡Gracias por aportar al barrio!`);
   };
 
   const handleCreateFavor = () => {
@@ -104,6 +107,9 @@ export const SolidaridadScreen = () => {
       intercambio_habilidades: 'Intercambio habilidades',
     };
 
+    const nextFavoresCount = (currentUser.favoresCount ?? 1) + 1;
+    const dynamicBadgeLevel = getCommunityStatusLevel(nextFavoresCount);
+
     const newFav: SolidaridadFavor = {
       id: `fav-${Date.now()}`,
       type: newCategory,
@@ -112,18 +118,19 @@ export const SolidaridadScreen = () => {
       badgeTime: 'Hoy',
       title: newTitle.trim(),
       description: newDesc.trim() || `${newTitle.trim()}. Disponible para vecinos de la urbanización.`,
-      ownerName: CURRENT_USER.name,
-      ownerAvatarUrl: CURRENT_USER.avatarUrl,
-      location: `${CURRENT_USER.calle} ${CURRENT_USER.numero}`,
-      phone: CURRENT_USER.phone,
+      ownerName: currentUser.name,
+      ownerAvatarUrl: currentUser.avatarUrl,
+      location: `${currentUser.calle} ${currentUser.numero}`,
+      phone: currentUser.phone,
       actionButtonText: 'Pedir apoyo',
       iconName: 'wrench',
       estado: 'disponible',
-      donorBadgeLevel: 'plata',
+      donorBadgeLevel: dynamicBadgeLevel,
     };
 
     setFavores((prev) => [newFav, ...prev]);
-    showToast('¡Publicación agregada con éxito al Muro Solidario!');
+    addFavorCompleted();
+    showToast('¡Publicación agregada al Muro Solidario (+1 favor a tu estatus)!');
     setIsCreateModalOpen(false);
     setNewTitle('');
     setNewDesc('');

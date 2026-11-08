@@ -15,6 +15,8 @@ export interface UserProfile {
   avatarUrl?: string;
   phone: string;
   verified: boolean;
+  vistosBuenos?: number;
+  favoresCount?: number;
 }
 
 export interface Convocatoria {
