@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -20,6 +20,7 @@ import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import { getSQLiteKeyValue, setSQLiteKeyValue } from '../lib/sqliteDatabase';
 
 // /Fase4: Motivos de emergencia que se guardan junto con la ubicación.
 const INCIDENT_OPTIONS = [
@@ -48,8 +49,18 @@ export const SosModal = () => {
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { isLoading: isLocationLoading, requestLocation } = useGeolocation();
-  const { saveToOfflineQueue, removeFromOfflineQueue } = useOfflineSync();
+  const { saveToOfflineQueue, removeFromOfflineQueue, clearSosModalReports } = useOfflineSync();
   const insets = useSafeAreaInsets();
+
+  // Restaurar el activeReportId persistido en SQLite al cargar el componente
+  useEffect(() => {
+    (async () => {
+      const savedReportId = await getSQLiteKeyValue<string | null>('sos_active_report_id', null);
+      if (savedReportId) {
+        setActiveReportId(savedReportId);
+      }
+    })();
+  }, []);
 
   // /Fase4: Bloquea dobles envíos y permite retirar de SQLite la alerta cancelada.
   const handlePanicAction = async () => {
@@ -58,18 +69,17 @@ export const SosModal = () => {
 
     try {
       if (isSosAlertSent) {
-        const wasRemoved = activeReportId
-          ? await removeFromOfflineQueue(activeReportId)
-          : false;
-        if (!wasRemoved) {
-          showToast('No se pudo retirar la alerta de la cola local.');
-          return;
+        if (activeReportId) {
+          await removeFromOfflineQueue(activeReportId);
         }
+        await clearSosModalReports(currentUser?.id);
+        await setSQLiteKeyValue('sos_active_report_id', null);
 
         toggleSosAlert();
         setUserSafetyStatus('none');
         setSelectedIncident(null);
         setActiveReportId(null);
+        showToast('✓ Alerta SOS desactivada.');
         return;
       }
 
@@ -100,7 +110,9 @@ export const SosModal = () => {
       }
 
       setActiveReportId(reportId);
+      await setSQLiteKeyValue('sos_active_report_id', reportId);
       toggleSosAlert();
+      showToast('⚠️ Alerta SOS activada y guardada.');
     } catch (error) {
       setUserSafetyStatus('none');
       showToast('Ocurrió un error al registrar la alerta.');

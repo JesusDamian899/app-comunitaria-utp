@@ -214,19 +214,47 @@ export const useOfflineSync = () => {
     }
   };
 
-  const removeFromOfflineQueue = async (reportId: string) => {
+  const removeFromOfflineQueue = async (reportId?: string | null): Promise<boolean> => {
     try {
       const database = await getDatabase();
-      const result = await database.runAsync(
-        `DELETE FROM ${DATABASE_TABLE} WHERE id = ?`,
-        reportId
-      );
-      if (result.changes === 0) return false;
-
+      if (reportId) {
+        await database.runAsync(
+          `DELETE FROM ${DATABASE_TABLE} WHERE id = ?`,
+          reportId
+        );
+      }
       await publishOfflineQueue();
       return true;
     } catch (error) {
       console.error('Error cancelando reporte offline', error);
+      return false;
+    }
+  };
+
+  const clearSosModalReports = async (userId?: string): Promise<boolean> => {
+    try {
+      const database = await getDatabase();
+      const rows = await database.getAllAsync<{ id: string; payload: string }>(
+        `SELECT id, payload FROM ${DATABASE_TABLE}`
+      );
+      for (const row of rows) {
+        try {
+          const report = JSON.parse(row.payload) as Record<string, unknown>;
+          if (
+            report.source === 'sos-modal' ||
+            report.type === 'RESCUE' ||
+            (userId && report.userId === userId)
+          ) {
+            await database.runAsync(`DELETE FROM ${DATABASE_TABLE} WHERE id = ?`, row.id);
+          }
+        } catch {
+          continue;
+        }
+      }
+      await publishOfflineQueue();
+      return true;
+    } catch (error) {
+      console.error('Error limpiando reportes SOS en SQLite', error);
       return false;
     }
   };
@@ -283,6 +311,7 @@ export const useOfflineSync = () => {
     offlineQueue,
     saveToOfflineQueue,
     removeFromOfflineQueue,
+    clearSosModalReports,
     syncOfflineData,
   };
 };
