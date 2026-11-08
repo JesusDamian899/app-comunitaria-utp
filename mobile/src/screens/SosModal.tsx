@@ -17,6 +17,7 @@ import {
 } from '@expo/vector-icons';
 import { MOCK_DIRECT_CALLS } from '../mock/data';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../components/AuthGuard';
 import { useGeolocation } from '../hooks/useGeolocation';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 
@@ -42,6 +43,7 @@ export const SosModal = () => {
     setUserSafetyStatus,
   } = useApp();
 
+  const { currentUser } = useAuth();
   const [selectedIncident, setSelectedIncident] = useState<IncidentType | null>(null);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +83,7 @@ export const SosModal = () => {
         id: reportId,
         type: 'RESCUE',
         incident: selectedIncident,
+        userId: currentUser?.id,
         location: coords
           ? `(${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`
           : 'Ubicación no disponible',

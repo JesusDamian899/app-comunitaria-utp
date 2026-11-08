@@ -57,7 +57,7 @@ export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) =>
     try {
       if (isRegistering) {
         const generatedPin = Math.floor(1000 + Math.random() * 9000).toString();
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: {
@@ -73,6 +73,10 @@ export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) =>
           },
         });
         if (error) throw error;
+        if (data?.session) {
+          onAuthenticated();
+          return;
+        }
         setInfoMsg(`¡Cuenta creada! Tu PIN de servicios es ${generatedPin}. Ahora inicia sesión.`);
         setIsRegistering(false);
       } else {

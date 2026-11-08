@@ -1,0 +1,9 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true
+  },
+  "include": ["src/**/*", "App.tsx", "index.ts"],
+  "exclude": ["node_modules", "app-movil"]
+}
+

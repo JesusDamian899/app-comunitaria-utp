@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Circle, Marker } from 'react-native-maps';
+import { useAuth } from './AuthGuard';
 import { CURRENT_USER } from '../mock/data';
 
 // /Fase4: Marcadores ficticios para la demo; reemplazar al conectar datos georreferenciados reales.
@@ -43,10 +44,12 @@ const TYPE_COLORS: Record<MapItem['type'], string> = {
 
 export const CrisisMap = () => {
   const mapRef = useRef<MapView | null>(null);
+  const { currentUser } = useAuth();
+  const user = currentUser || CURRENT_USER;
   const [activeFilter, setActiveFilter] = useState<MapFilter>('all');
   const [selectedItem, setSelectedItem] = useState<MapItem | null>(null);
   // /Fase4: Vecinos ven capas agregadas; las ubicaciones vulnerables se reservan para la Junta.
-  const canViewVulnerableLocations = CURRENT_USER.role === 'Junta Vecinal';
+  const canViewVulnerableLocations = user.role === 'Junta Vecinal';
 
   const availableFilters: { type: MapFilter; label: string; count?: number }[] = [
     { type: 'all', label: 'Todos' },
@@ -113,38 +116,50 @@ export const CrisisMap = () => {
       </ScrollView>
 
       <View style={styles.mapFrame}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={MAP_REGION}
-          onPress={() => setSelectedItem(null)}
-          accessibilityLabel="Mapa comunitario de vulnerabilidad y recursos, con datos de demostración"
-        >
-          {visibleClusters.map((cluster) => (
-            <Circle
-              key={`${cluster.id}-radius`}
-              center={{ latitude: cluster.latitude, longitude: cluster.longitude }}
-              radius={150}
-              strokeColor="rgba(220, 38, 38, 0.8)"
-              fillColor="rgba(220, 38, 38, 0.12)"
-              strokeWidth={2}
-            />
-          ))}
-          {visibleItems.map((item) => (
-            <Marker
-              key={item.id}
-              coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-              title={item.label}
-              description={item.detail}
-              onPress={() => setSelectedItem(item)}
-            >
-              <View style={[styles.marker, { backgroundColor: TYPE_COLORS[item.type] }]}>
-                <Ionicons name={item.icon} size={16} color="#ffffff" />
-                {'count' in item && <Text style={styles.markerCount}>{item.count}</Text>}
-              </View>
-            </Marker>
-          ))}
-        </MapView>
+        {Platform.OS === 'web' ? (
+          <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', padding: 20 }]}>
+            <Ionicons name="map-outline" size={40} color="#64748b" />
+            <Text style={{ marginTop: 10, fontSize: 13, fontWeight: '700', color: '#1e293b', textAlign: 'center' }}>
+              Mapa Comunitario Interactivo
+            </Text>
+            <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'center', marginTop: 4 }}>
+              Visualización con capas geográficas activa en dispositivos móviles Android e iOS con Expo Go.
+            </Text>
+          </View>
+        ) : (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={MAP_REGION}
+            onPress={() => setSelectedItem(null)}
+            accessibilityLabel="Mapa comunitario de vulnerabilidad y recursos, con datos de demostración"
+          >
+            {visibleClusters.map((cluster) => (
+              <Circle
+                key={`${cluster.id}-radius`}
+                center={{ latitude: cluster.latitude, longitude: cluster.longitude }}
+                radius={150}
+                strokeColor="rgba(220, 38, 38, 0.8)"
+                fillColor="rgba(220, 38, 38, 0.12)"
+                strokeWidth={2}
+              />
+            ))}
+            {visibleItems.map((item) => (
+              <Marker
+                key={item.id}
+                coordinate={{ latitude: item.latitude, longitude: item.longitude }}
+                title={item.label}
+                description={item.detail}
+                onPress={() => setSelectedItem(item)}
+              >
+                <View style={[styles.marker, { backgroundColor: TYPE_COLORS[item.type] }]}>
+                  <Ionicons name={item.icon} size={16} color="#ffffff" />
+                  {'count' in item && <Text style={styles.markerCount}>{item.count}</Text>}
+                </View>
+              </Marker>
+            ))}
+          </MapView>
+        )}
 
         <View pointerEvents="none" style={styles.demoBadge}>
           <View style={styles.demoDot} />

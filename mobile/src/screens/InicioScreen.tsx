@@ -1,16 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { MOCK_TOP_VECINOS_DEL_MES, MOCK_CONVOCATORIA, MOCK_MANTENIMIENTO, MOCK_ACTA } from '../mock/data';
+import { MOCK_TOP_VECINOS_DEL_MES, MOCK_CONVOCATORIA, MOCK_MANTENIMIENTO, MOCK_ACTA, CURRENT_USER } from '../mock/data';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { CrisisMap } from '../components/CrisisMap';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../components/AuthGuard';
 
 // [Fase 4]: Importación del hook useOfflineSync para manejar la base de datos local
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useGeolocation } from '../hooks/useGeolocation';
 
 export const InicioScreen = () => {
+  const { currentUser } = useAuth();
+  const user = currentUser || CURRENT_USER;
+
   // [Fase 4]: Extraemos toggleCrisisRealMode para poder regresar al estado normal
   const {
     hasConfirmedAttendance,
@@ -26,23 +30,32 @@ export const InicioScreen = () => {
   // [Fase 4]: Inicializamos la cola de sincronización offline
   const { isOnline, offlineQueue, saveToOfflineQueue } = useOfflineSync();
   const { requestLocation } = useGeolocation();
-  // /Fase4: Resumen local calculado desde los reportes persistidos en SQLite.
-  const safeReportCount = offlineQueue.filter((report) => report.type === 'SAFE').length;
-  const rescueReportCount = offlineQueue.filter((report) => report.type === 'RESCUE').length;
+  // /Fase4: Solo cuenta el estado vigente de esta cuenta, no cada pulsación histórica.
+  const savedSafetyStatus = offlineQueue.find(
+    (report) => report.source === 'crisis-board' && report.userId === user.id
+  )?.status;
+  const activeSafetyStatus = userSafetyStatus !== 'none'
+    ? userSafetyStatus
+    : savedSafetyStatus === 'safe' || savedSafetyStatus === 'needs_rescue'
+      ? savedSafetyStatus
+      : 'none';
+  const safeReportCount = activeSafetyStatus === 'safe' ? 1 : 0;
+  const rescueReportCount = activeSafetyStatus === 'needs_rescue' ? 1 : 0;
 
   const first = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 1);
 
   const handleEmergencyAction = async (type: 'SAFE' | 'RESCUE') => {
     const nextStatus = type === 'SAFE' ? 'safe' : 'needs_rescue';
-    setUserSafetyStatus(nextStatus);
-
     const coords = await requestLocation();
 
     const locationLabel = coords
       ? `(${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)})`
       : 'Ubicación no disponible';
 
-    saveToOfflineQueue({
+    const saved = await saveToOfflineQueue({
+      id: `crisis-status-${user.id}`,
+      source: 'crisis-board',
+      userId: user.id,
       type,
       location: locationLabel,
       coordinates: coords,
@@ -50,17 +63,24 @@ export const InicioScreen = () => {
       status: nextStatus,
     });
 
+    if (!saved) {
+      showToast('No se pudo guardar tu estado en este dispositivo.');
+      return;
+    }
+
+    setUserSafetyStatus(nextStatus);
+
     showToast(
       type === 'SAFE'
         ? 'Estado guardado con ubicación actual.'
-        : 'Alerta de rescate enviada con ubicación actual.'
+        : 'Solicitud de rescate guardada localmente.'
     );
   };
 
   const safetyLabel =
-    userSafetyStatus === 'safe'
+    activeSafetyStatus === 'safe'
       ? 'ESTADO: A SALVO'
-      : userSafetyStatus === 'needs_rescue'
+      : activeSafetyStatus === 'needs_rescue'
         ? 'ESTADO: REQUIERE RESCATE'
         : 'ESTADO: SIN ALERTA';
   const second = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 2);

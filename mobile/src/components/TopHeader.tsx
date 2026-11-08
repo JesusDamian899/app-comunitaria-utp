@@ -2,11 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from './AuthGuard';
 import { CURRENT_USER } from '../mock/data';
 
 // /Fase4: El encabezado conserva identidad y ubicación; el acceso SOS está en el botón flotante.
 export const TopHeader = () => {
   const insets = useSafeAreaInsets();
+  const { currentUser } = useAuth();
+  const user = currentUser || CURRENT_USER;
 
   const topPadding = Math.max(insets.top, 10);
 
@@ -14,8 +17,8 @@ export const TopHeader = () => {
     <View style={[styles.header, { paddingTop: topPadding + 6 }]}>
       <View style={styles.leftContainer}>
         <View style={styles.avatarWrapper}>
-          <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.avatar} />
-          {CURRENT_USER.verified && (
+          <Image source={{ uri: user.avatarUrl || CURRENT_USER.avatarUrl }} style={styles.avatar} />
+          {user.verified && (
             <View style={styles.verifiedDot}>
               <Ionicons name="checkmark" size={10} color="#fff" />
             </View>
@@ -25,14 +28,14 @@ export const TopHeader = () => {
         <View style={styles.textContainer}>
           <View style={styles.titleRow}>
             <Text style={styles.urbanizacionTitle} numberOfLines={1}>
-              {CURRENT_USER.urbanizacion}
+              {user.urbanizacion || 'Urb. Las Palmeras'}
             </Text>
             <View style={styles.sectorBadge}>
-              <Text style={styles.sectorBadgeText}>{CURRENT_USER.sector}</Text>
+              <Text style={styles.sectorBadgeText}>{user.sector || 'Sector 2'}</Text>
             </View>
           </View>
           <Text style={styles.locationSubtitle} numberOfLines={1}>
-            {CURRENT_USER.calle} {CURRENT_USER.numero}
+            {user.calle || 'Calle Los Sauces'} {user.numero || 'S/N'}
           </Text>
         </View>
       </View>
