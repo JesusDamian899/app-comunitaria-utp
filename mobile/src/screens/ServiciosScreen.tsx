@@ -23,6 +23,11 @@ import type { ServiceProvider, ServiceCategoryType } from '../types';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
+import {
+  saveLocalServiceToSQLite,
+  getLocalServicesFromSQLite,
+  updateServiceInSQLite,
+} from '../lib/sqliteDatabase';
 
 const CATEGORIES_NORMAL: { id: ServiceCategoryType; label: string; icon: string }[] = [
   { id: 'todos', label: 'Todos', icon: 'apps' },
@@ -77,8 +82,19 @@ export const ServiciosScreen = () => {
   const [newTipo, setNewTipo] = useState<'oficio' | 'profesion'>('oficio');
   const [newDesc, setNewDesc] = useState('');
 
-  // Sincronización inicial desde Supabase
+  // Sincronización híbrida: SQLite local + Supabase
   useEffect(() => {
+    // 1. Carga offline desde SQLite
+    getLocalServicesFromSQLite().then((localSaved) => {
+      if (localSaved && localSaved.length > 0) {
+        setProviders((prev) => {
+          const ids = new Set(localSaved.map((s) => s.id));
+          return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+        });
+      }
+    });
+
+    // 2. Consulta remota en Supabase
     if (supabase) {
       supabase
         .from('oficios_locales')
@@ -191,6 +207,12 @@ export const ServiciosScreen = () => {
       )
     );
 
+    // Persistencia offline en SQLite local
+    updateServiceInSQLite(
+      recommendingProvider.id,
+      Math.max(0, recommendingProvider.recommendationsCount + delta)
+    );
+
     // Persistencia en Supabase
     if (isNetworkOnline && supabase && !recommendingProvider.id.startsWith('prov-')) {
       supabase
@@ -267,6 +289,9 @@ export const ServiciosScreen = () => {
     };
 
     setProviders((prev) => [nuevoServicio, ...prev]);
+
+    // Persistencia offline en SQLite local
+    saveLocalServiceToSQLite(nuevoServicio);
 
     // Persistencia en Supabase
     if (isNetworkOnline && supabase) {

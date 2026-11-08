@@ -25,6 +25,11 @@ import { useApp } from '../context/AppContext';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import {
+  saveLocalFavorToSQLite,
+  getLocalFavoresFromSQLite,
+  updateFavorStatusInSQLite,
+} from '../lib/sqliteDatabase';
 
 export type SolidaridadFilterType = 'todos' | SolidaridadCategory | 'emergencia';
 
@@ -76,8 +81,19 @@ export const SolidaridadScreen = () => {
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState<SolidaridadCategory>('prestamo');
 
-  // Sincronización inicial desde Supabase
+  // Sincronización híbrida: SQLite local + Supabase
   useEffect(() => {
+    // 1. Carga offline desde SQLite
+    getLocalFavoresFromSQLite().then((localSaved) => {
+      if (localSaved && localSaved.length > 0) {
+        setFavores((prev) => {
+          const ids = new Set(localSaved.map((s) => s.id));
+          return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+        });
+      }
+    });
+
+    // 2. Consulta remota en Supabase
     if (supabase) {
       supabase
         .from('muro_solidario')
@@ -150,6 +166,7 @@ export const SolidaridadScreen = () => {
     setFavores((prev) =>
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'ayuda_solicitada' } : item))
     );
+    updateFavorStatusInSQLite(favor.id, 'ayuda_solicitada');
   };
 
   const handleMarkAsReceived = (favor: SolidaridadFavor) => {
@@ -157,6 +174,7 @@ export const SolidaridadScreen = () => {
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'recibido' } : item))
     );
     addFavorCompleted();
+    updateFavorStatusInSQLite(favor.id, 'recibido');
 
     // Actualización real en Supabase si no es id local ficticio
     if (isNetworkOnline && supabase && !favor.id.startsWith('fav-')) {
@@ -215,7 +233,8 @@ export const SolidaridadScreen = () => {
     setFavores((prev) => [newFav, ...prev]);
     addFavorCompleted();
 
-    // 2. Persistencia en SQLite local
+    // 2. Persistencia en SQLite local (Directa y Cola Offline)
+    saveLocalFavorToSQLite(newFav);
     await saveToOfflineQueue({
       id: newFav.id,
       type: 'SOLIDARIDAD_FAVOR',
