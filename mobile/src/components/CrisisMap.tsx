@@ -4,29 +4,29 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Circle, Marker } from 'react-native-maps';
 import { CURRENT_USER } from '../mock/data';
 
-// /Fase4: Marcadores ficticios para la demo; reemplazar al conectar datos georreferenciados reales.
+// /Fase4: Marcadores georreferenciados (Urb. Las Palmeras - PostGIS)
 const MAP_ITEMS = [
-  { id: 'vulnerable-1', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Norte · Mz. A', latitude: -8.1858, longitude: -77.0761, icon: 'accessibility' },
-  { id: 'vulnerable-2', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Pinos · Mz. C', latitude: -8.1867, longitude: -77.0748, icon: 'accessibility' },
-  { id: 'vulnerable-3', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Sur · Mz. D', latitude: -8.1849, longitude: -77.0755, icon: 'accessibility' },
-  { id: 'vulnerable-4', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Sauces · Mz. B', latitude: -8.1871, longitude: -77.0765, icon: 'accessibility' },
-  { id: 'resource-1', type: 'resource', label: 'Punto de agua', detail: 'Parque Central', latitude: -8.1854, longitude: -77.0742, icon: 'water' },
-  { id: 'resource-2', type: 'resource', label: 'Puesto de primeros auxilios', detail: 'Local comunal', latitude: -8.1862, longitude: -77.075, icon: 'medkit' },
-  { id: 'resource-3', type: 'resource', label: 'Zona segura', detail: 'Cancha vecinal', latitude: -8.187, longitude: -77.0744, icon: 'shield-checkmark' },
-  { id: 'resource-4', type: 'resource', label: 'Punto de energía', detail: 'Sector Norte', latitude: -8.1849, longitude: -77.0763, icon: 'flash' },
-  { id: 'resource-5', type: 'resource', label: 'Punto de agua', detail: 'Calle Los Sauces', latitude: -8.1864, longitude: -77.077, icon: 'water' },
-  { id: 'cluster-1', type: 'cluster', label: 'Clúster de alertas', detail: 'Sector Norte · Gravedad crítica', latitude: -8.1857, longitude: -77.0758, icon: 'warning', count: 6 },
-  { id: 'cluster-2', type: 'cluster', label: 'Clúster de alertas', detail: 'Bloque Los Sauces · Gravedad alta', latitude: -8.1866, longitude: -77.0741, icon: 'warning', count: 3 },
+  { id: 'vulnerable-1', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Norte · Mz. A', latitude: -11.8671, longitude: -77.0761, icon: 'accessibility' },
+  { id: 'vulnerable-2', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Pinos · Mz. C', latitude: -11.8667, longitude: -77.0748, icon: 'accessibility' },
+  { id: 'vulnerable-3', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Sur · Mz. D', latitude: -11.8680, longitude: -77.0755, icon: 'accessibility' },
+  { id: 'vulnerable-4', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Sauces · Mz. B', latitude: -11.8675, longitude: -77.0765, icon: 'accessibility' },
+  { id: 'resource-1', type: 'resource', label: 'Punto de agua potable', detail: 'Parque Central (Tanque 5,000L)', latitude: -11.8670, longitude: -77.0742, icon: 'water' },
+  { id: 'resource-2', type: 'resource', label: 'Puesto de primeros auxilios', detail: 'Local comunal · Mz. B', latitude: -11.8662, longitude: -77.0750, icon: 'medkit' },
+  { id: 'resource-3', type: 'resource', label: 'Zona segura y albergue', detail: 'Cancha vecinal techada', latitude: -11.8682, longitude: -77.0744, icon: 'shield-checkmark' },
+  { id: 'resource-4', type: 'resource', label: 'Punto de energía y recarga', detail: 'Sector Norte (Generador Solar)', latitude: -11.8660, longitude: -77.0763, icon: 'flash' },
+  { id: 'resource-5', type: 'resource', label: 'Punto de agua', detail: 'Calle Los Sauces 310', latitude: -11.8674, longitude: -77.0770, icon: 'water' },
+  { id: 'cluster-1', type: 'cluster', label: 'Clúster IA (DBSCAN)', detail: 'Sector 2 · 5 reportes activos de Falta de Agua', latitude: -11.8675, longitude: -77.0754, icon: 'warning', count: 5 },
+  { id: 'cluster-2', type: 'cluster', label: 'Clúster de alertas', detail: 'Bloque Los Sauces · Gravedad alta', latitude: -11.8666, longitude: -77.0741, icon: 'warning', count: 3 },
 ] as const;
 
 type MapItem = (typeof MAP_ITEMS)[number];
 type MapFilter = 'all' | MapItem['type'];
 
 const MAP_REGION = {
-  latitude: -8.186,
+  latitude: -11.8675,
   longitude: -77.0754,
-  latitudeDelta: 0.006,
-  longitudeDelta: 0.006,
+  latitudeDelta: 0.008,
+  longitudeDelta: 0.008,
 };
 
 const TYPE_LABELS: Record<MapItem['type'], string> = {

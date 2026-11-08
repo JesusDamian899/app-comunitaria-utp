@@ -10,7 +10,7 @@ import { useAuth } from '../components/AuthGuard';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import { useGeolocation } from '../hooks/useGeolocation';
 
-export const InicioScreen = () => {
+export const InicioScreen = ({ navigation }: any) => {
   const {
     hasConfirmedAttendance,
     toggleAttendance,
@@ -163,6 +163,24 @@ export const InicioScreen = () => {
               </Text>
             </View>
           ))}
+
+          {/* Acceso Rápido al Mapa Interactivo Comunitario */}
+          <TouchableOpacity 
+            style={styles.mapShortcutCard}
+            onPress={() => navigation?.navigate('Mapa')}
+            activeOpacity={0.85}
+          >
+            <View style={styles.mapShortcutIcon}>
+              <Ionicons name="map" size={22} color="#1d4ed8" />
+            </View>
+            <View style={styles.mapShortcutText}>
+              <Text style={styles.mapShortcutTitle}>🗺️ Mapa Comunitario y Recursos</Text>
+              <Text style={styles.mapShortcutDesc}>
+                Explora zonas seguras, puntos de agua y alertas en tiempo real
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#1d4ed8" />
+          </TouchableOpacity>
 
           {/* Tablero: Vecino del Mes (Gamificación - Podio Top 3) */}
           <View style={styles.boardCard}>
@@ -910,5 +928,45 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#64748b',
     lineHeight: 16,
+  },
+  mapShortcutCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1.5,
+    borderColor: '#bfdbfe',
+    borderRadius: 14,
+    padding: 13,
+    marginBottom: 14,
+    shadowColor: '#1d4ed8',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  mapShortcutIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  mapShortcutText: {
+    flex: 1,
+  },
+  mapShortcutTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1e3a8a',
+  },
+  mapShortcutDesc: {
+    fontSize: 10.5,
+    color: '#3b82f6',
+    fontWeight: '500',
+    marginTop: 2,
   },
 });

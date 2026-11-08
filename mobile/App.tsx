@@ -14,6 +14,7 @@ import { SosModal } from './src/screens/SosModal';
 
 import { InicioScreen } from './src/screens/InicioScreen';
 import { ServiciosScreen } from './src/screens/ServiciosScreen';
+import { MapaScreen } from './src/screens/MapaScreen';
 import { SolidaridadScreen } from './src/screens/SolidaridadScreen';
 import { PerfilScreen } from './src/screens/PerfilScreen';
 import { AuthGuard } from './src/components/AuthGuard';
@@ -75,6 +76,16 @@ function MainNavigator() {
             tabBarLabel: 'Servicios',
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? 'construct' : 'construct-outline'} size={focused ? 23 : 21} color={color} />
+            ),
+          }}
+        />
+        <Tab.Screen
+          name="Mapa"
+          component={MapaScreen}
+          options={{
+            tabBarLabel: 'Mapa',
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons name={focused ? 'map' : 'map-outline'} size={focused ? 23 : 21} color={color} />
             ),
           }}
         />

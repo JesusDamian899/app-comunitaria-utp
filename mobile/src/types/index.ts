@@ -1,4 +1,4 @@
-export type NavigationTab = 'inicio' | 'servicios' | 'solidaridad' | 'perfil';
+export type NavigationTab = 'inicio' | 'servicios' | 'mapa' | 'solidaridad' | 'perfil';
 
 export interface UserProfile {
   id: string;
