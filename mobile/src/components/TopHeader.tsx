@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { useAuth } from './AuthGuard';
 import { TutorialModal } from './TutorialModal';
 
 export const TopHeader = () => {
+  const radiusRef = useRef<any>(null);
   const {
     isCrisisRealActive,
     openSos,
@@ -17,9 +18,25 @@ export const TopHeader = () => {
     setProximityRadius,
     isNetworkOnline,
     toggleNetworkOnline,
+    registerTutorialTarget,
   } = useApp();
   const { currentUser } = useAuth();
   const insets = useSafeAreaInsets();
+
+  const handleRadiusLayout = () => {
+    radiusRef.current?.measureInWindow?.((x: number, y: number, width: number, height: number) => {
+      if (width > 0 && height > 0) {
+        registerTutorialTarget('step-radios', {
+          x: x - 4,
+          y: y - 3,
+          width: width + 8,
+          height: height + 6,
+          borderRadius: 10,
+          shape: 'rect',
+        });
+      }
+    });
+  };
 
   const topPadding = Math.max(insets.top, 10);
   const showVerifiedCheck = (currentUser.vistosBuenos ?? 0) >= 5 || currentUser.verified;
@@ -77,7 +94,11 @@ export const TopHeader = () => {
         {/* Fila Secundaria: Radios de Proximidad y Switch Online/Offline */}
         <View style={styles.subRow}>
           {/* Selector de Radios (500m, 2km, 5km) */}
-          <View style={styles.radiusContainer}>
+          <View
+            ref={radiusRef}
+            onLayout={handleRadiusLayout}
+            style={styles.radiusContainer}
+          >
             <Text style={styles.radiusLabel}>Radio:</Text>
             {([500, 2000, 5000] as const).map((r) => {
               const active = proximityRadius === r;

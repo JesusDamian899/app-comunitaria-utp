@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Dimensions } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { AppProvider } from './src/context/AppContext';
+import { AppProvider, useApp } from './src/context/AppContext';
 import { TopHeader } from './src/components/TopHeader';
 import { Toast } from './src/components/Toast';
 import { FloatingSosButton } from './src/components/FloatingSosButton';
@@ -26,8 +26,43 @@ const Tab = createBottomTabNavigator();
 
 function MainNavigator() {
   const insets = useSafeAreaInsets();
+  const { registerTutorialTarget } = useApp();
   const bottomBarPadding = insets.bottom > 0 ? insets.bottom : 8;
   const bottomBarHeight = 56 + bottomBarPadding;
+
+  useEffect(() => {
+    const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+    const tabWidth = SCREEN_WIDTH / 5;
+    const tabY = SCREEN_HEIGHT - bottomBarHeight + 2;
+    const tabH = 50;
+
+    registerTutorialTarget('step-servicios', {
+      x: tabWidth * 1 + 2,
+      y: tabY,
+      width: tabWidth - 4,
+      height: tabH,
+      borderRadius: 14,
+      shape: 'rect',
+    });
+
+    registerTutorialTarget('step-mapa', {
+      x: tabWidth * 2 + 2,
+      y: tabY,
+      width: tabWidth - 4,
+      height: tabH,
+      borderRadius: 14,
+      shape: 'rect',
+    });
+
+    registerTutorialTarget('step-solidaridad', {
+      x: tabWidth * 3 + 2,
+      y: tabY,
+      width: tabWidth - 4,
+      height: tabH,
+      borderRadius: 14,
+      shape: 'rect',
+    });
+  }, [bottomBarHeight]);
 
   return (
     <View style={styles.mainContainer}>

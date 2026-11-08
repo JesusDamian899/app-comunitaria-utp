@@ -13,6 +13,15 @@ export interface CustomAviso {
   isOfficial?: boolean;
 }
 
+export interface TutorialTargetLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  borderRadius?: number;
+  shape?: 'rect' | 'circle';
+}
+
 interface AppContextType {
   currentTab: NavigationTab;
   setCurrentTab: (tab: NavigationTab) => void;
@@ -59,6 +68,10 @@ interface AppContextType {
   addCustomService: (service: ServiceProvider) => void;
   customFavores: SolidaridadFavor[];
   addCustomFavor: (favor: SolidaridadFavor) => void;
+
+  // Targets dinámicos para el Tutorial Spotlight
+  tutorialTargets: Record<string, TutorialTargetLayout>;
+  registerTutorialTarget: (id: string, layout: TutorialTargetLayout) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -84,6 +97,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   // Servicios y Favores dinámicos en tiempo real para el Mapa
   const [customServices, setCustomServices] = useState<ServiceProvider[]>([]);
   const [customFavores, setCustomFavores] = useState<SolidaridadFavor[]>([]);
+
+  // Targets medidos dinámicamente para el Tutorial SVG Spotlight
+  const [tutorialTargets, setTutorialTargets] = useState<Record<string, TutorialTargetLayout>>({});
+
+  const registerTutorialTarget = (id: string, layout: TutorialTargetLayout) => {
+    setTutorialTargets((prev) => ({
+      ...prev,
+      [id]: layout,
+    }));
+  };
 
   const addCustomService = (service: ServiceProvider) => {
     setCustomServices((prev) => [service, ...prev]);
@@ -243,6 +266,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         addCustomService,
         customFavores,
         addCustomFavor,
+        tutorialTargets,
+        registerTutorialTarget,
       }}
     >
       {children}

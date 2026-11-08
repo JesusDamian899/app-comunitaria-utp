@@ -1,18 +1,36 @@
-import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
 
 export const FloatingSosButton = () => {
-  const { openSos, isCrisisRealActive } = useApp();
+  const sosRef = useRef<any>(null);
+  const { openSos, isCrisisRealActive, registerTutorialTarget } = useApp();
   const insets = useSafeAreaInsets();
 
   // Se posiciona exactamente arriba de la barra de pestañas (tab bar: 58 + insets.bottom)
   const bottomPosition = (insets.bottom > 0 ? insets.bottom : 8) + 66;
 
+  const handleSosLayout = () => {
+    sosRef.current?.measureInWindow?.((x: number, y: number, width: number, height: number) => {
+      if (width > 0 && height > 0) {
+        registerTutorialTarget('step-sos', {
+          x,
+          y,
+          width,
+          height,
+          borderRadius: width / 2,
+          shape: 'circle',
+        });
+      }
+    });
+  };
+
   return (
     <TouchableOpacity
+      ref={sosRef as any}
+      onLayout={handleSosLayout}
       style={[
         styles.floatingButton,
         { bottom: bottomPosition },
