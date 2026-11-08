@@ -6,7 +6,7 @@ import { SolidaridadScreen } from './features/solidaridad/SolidaridadScreen';
 import { PerfilScreen } from './features/perfil/PerfilScreen';
 import { SosScreen } from './features/SOS/SosScreen';
 import { TutorialModal } from './features/tutorial/components/TutorialModal';
-
+import { AuthGuard } from './features/auth/AuthGuard';
 function MainApp() {
   const { currentTab, isSosOpen, isTutorialOpen, closeTutorial } = useApp();
 
@@ -38,7 +38,10 @@ function MainApp() {
 export default function App() {
   return (
     <AppProvider>
-      <MainApp />
+      <AuthGuard>
+        <MainApp />
+      </AuthGuard>
     </AppProvider>
   );
 }
+
