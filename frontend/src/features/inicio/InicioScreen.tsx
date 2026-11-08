@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { ConvocatoriaCard } from './components/ConvocatoriaCard';
 import { MantenimientoCard } from './components/MantenimientoCard';
 import { ActaCard } from './components/ActaCard';
+import { VecinoDelMesBoard } from './components/VecinoDelMesBoard';
 
 export const InicioScreen = () => {
   const { showToast } = useApp();
@@ -26,6 +27,8 @@ export const InicioScreen = () => {
         </button>
       </div>
 
+      {/* Tablero: Vecino del Mes (Gamificación: Top 3 con más favores) */}
+      <VecinoDelMesBoard />
 
       {/* Grid adaptativo: 1 columna en móvil y 3 columnas armónicas en tablet/desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 items-start">
