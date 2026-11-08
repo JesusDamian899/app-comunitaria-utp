@@ -24,6 +24,7 @@ import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type SolidaridadFilterType = 'todos' | SolidaridadCategory;
 
@@ -43,23 +44,48 @@ export const SolidaridadScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState<SolidaridadFilterType>('todos');
   const [favores, setFavores] = useState<SolidaridadFavor[]>(MOCK_FAVORES);
 
-  // Sincronización con Supabase (con fallback transparente a MOCK)
+  // Sincronización híbrida: AsyncStorage local + Supabase remoto
   useEffect(() => {
     let isMounted = true;
-    const loadMuroFromSupabase = async () => {
+    const loadMuro = async () => {
+      // 1. Cargar inmediatamente favores guardados en el almacenamiento del teléfono
+      let localSaved: SolidaridadFavor[] = [];
+      try {
+        const raw = await AsyncStorage.getItem('@user_local_favores');
+        if (raw) {
+          localSaved = JSON.parse(raw);
+          if (localSaved.length > 0 && isMounted) {
+            setFavores((prev) => {
+              const ids = new Set(localSaved.map((f) => f.id));
+              return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Error leyendo favores locales:', e);
+      }
+
+      // 2. Consultar Supabase
       if (!supabase) return;
       try {
-        const { data, error } = await supabase
+        let data: any[] | null = null;
+        // Intento 1: con perfiles
+        const res1 = await supabase
           .from('muro_solidario')
-          .select(`
-            *,
-            perfiles:vecino_id (nombre, telefono, urbanizacion, sector, calle, numero, avatar_url, favores_realizados)
-          `)
+          .select('*, perfiles(*)')
           .order('creado_en', { ascending: false });
 
-        if (error) {
-          console.warn('Muro solidario remoto no disponible, operando en modo local:', error.message);
-          return;
+        if (!res1.error && res1.data) {
+          data = res1.data;
+        } else {
+          // Intento 2: directo
+          const res2 = await supabase
+            .from('muro_solidario')
+            .select('*')
+            .order('creado_en', { ascending: false });
+          if (!res2.error && res2.data) {
+            data = res2.data;
+          }
         }
 
         if (data && data.length > 0 && isMounted) {
@@ -83,13 +109,13 @@ export const SolidaridadScreen = () => {
               badgeTime: 'Reciente',
               title: item.titulo || 'Apoyo solidario',
               description: item.descripcion || '',
-              ownerName: perfil.nombre || 'Vecino Solidario',
+              ownerName: perfil.nombre || item.titulo || 'Vecino Solidario',
               ownerAvatarUrl:
                 perfil.avatar_url ||
                 `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nombre || 'V')}&background=059669&color=fff&bold=true`,
               location:
                 item.direccion_referencia ||
-                `${perfil.calle || 'Calle Los Sauces'} ${perfil.numero || 'S/N'}`,
+                (perfil.calle ? `${perfil.calle} ${perfil.numero || ''}` : 'Urb. Las Palmeras'),
               phone: perfil.telefono || '998765432',
               actionButtonText: 'Pedir apoyo',
               iconName:
@@ -104,9 +130,10 @@ export const SolidaridadScreen = () => {
           });
 
           setFavores((prev) => {
-            const remoteIds = new Set(remoteFavores.map((f) => f.id));
-            const mockFiltered = MOCK_FAVORES.filter((f) => !remoteIds.has(f.id));
-            return [...remoteFavores, ...mockFiltered];
+            const combined = [...remoteFavores, ...localSaved];
+            const seenIds = new Set(combined.map((f) => f.id));
+            const mockFiltered = MOCK_FAVORES.filter((f) => !seenIds.has(f.id));
+            return [...combined, ...mockFiltered];
           });
         }
       } catch (err) {
@@ -114,7 +141,7 @@ export const SolidaridadScreen = () => {
       }
     };
 
-    loadMuroFromSupabase();
+    loadMuro();
     return () => {
       isMounted = false;
     };
@@ -229,22 +256,46 @@ export const SolidaridadScreen = () => {
     setNewTitle('');
     setNewDesc('');
 
-    // Si el usuario es de Supabase, lo persistimos en muro_solidario
+    // 1. Guardar en AsyncStorage para persistencia local permanente (sobrevive al reiniciar la app)
+    AsyncStorage.getItem('@user_local_favores')
+      .then((raw) => {
+        const list: SolidaridadFavor[] = raw ? JSON.parse(raw) : [];
+        const updated = [newFav, ...list.filter((f) => f.id !== newFav.id)];
+        return AsyncStorage.setItem('@user_local_favores', JSON.stringify(updated));
+      })
+      .catch((e) => console.warn('Error guardando favor en AsyncStorage:', e));
+
+    // 2. Si el usuario es de Supabase, lo persistimos en muro_solidario
     const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id);
     if (supabase && isUserUuid) {
       (async () => {
         try {
-          const { error } = await supabase
-            .from('muro_solidario')
-            .insert({
-              vecino_id: currentUser.id,
-              tipo_solicitud: newCategory,
-              titulo: newFav.title,
-              descripcion: newFav.description,
-              direccion_referencia: newFav.location,
-              estado: 'disponible',
-              ubicacion: 'SRID=4326;POINT(-77.0754 -11.8675)',
-            });
+          // Asegurar que exista en public.perfiles
+          await supabase.from('perfiles').upsert(
+            {
+              id: currentUser.id,
+              nombre: currentUser.name,
+              telefono: currentUser.phone,
+              rol: currentUser.role,
+              urbanizacion: currentUser.urbanizacion,
+              sector: currentUser.sector,
+              calle: currentUser.calle,
+              numero: currentUser.numero,
+              service_pin: currentUser.servicePin,
+              ubicacion: 'POINT(-77.0754 -11.8675)',
+            },
+            { onConflict: 'id' }
+          );
+
+          const { error } = await supabase.from('muro_solidario').insert({
+            vecino_id: currentUser.id,
+            tipo_solicitud: newCategory,
+            titulo: newFav.title,
+            descripcion: newFav.description,
+            direccion_referencia: newFav.location,
+            estado: 'disponible',
+            ubicacion: 'POINT(-77.0754 -11.8675)',
+          });
           if (error) {
             console.warn('Aviso: favor guardado localmente, error en nube:', error.message);
           }

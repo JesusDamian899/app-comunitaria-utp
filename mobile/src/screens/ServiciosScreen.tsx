@@ -23,6 +23,7 @@ import type { ServiceProvider, ServiceCategoryType, TipoActividadServicio, Servi
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CATEGORIES: { id: ServiceCategoryType; label: string; icon: string }[] = [
   { id: 'todos', label: 'Todos', icon: 'apps' },
@@ -43,24 +44,48 @@ export const ServiciosScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategoryType>('todos');
   const [providers, setProviders] = useState<ServiceProvider[]>(MOCK_PROVIDERS);
 
-  // Sincronización con Supabase (con fallback transparente a MOCK)
+  // Sincronización híbrida: AsyncStorage local + Supabase remoto
   useEffect(() => {
     let isMounted = true;
-    const loadOficiosFromSupabase = async () => {
+    const loadOficios = async () => {
+      // 1. Cargar inmediatamente los servicios guardados en el almacenamiento del teléfono
+      let localSaved: ServiceProvider[] = [];
+      try {
+        const raw = await AsyncStorage.getItem('@user_local_services');
+        if (raw) {
+          localSaved = JSON.parse(raw);
+          if (localSaved.length > 0 && isMounted) {
+            setProviders((prev) => {
+              const ids = new Set(localSaved.map((s) => s.id));
+              return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Error leyendo servicios locales:', e);
+      }
+
+      // 2. Consultar servicios remotos en Supabase
       if (!supabase) return;
       try {
-        const { data, error } = await supabase
+        let data: any[] | null = null;
+        // Intento 1: con relación a perfiles
+        const res1 = await supabase
           .from('oficios_locales')
-          .select(`
-            *,
-            perfiles:vecino_id (nombre, telefono, urbanizacion, sector, calle, numero, avatar_url, service_pin, vistos_buenos),
-            resenas_servicios (*)
-          `)
+          .select('*, perfiles(*), resenas_servicios(*)')
           .order('creado_en', { ascending: false });
 
-        if (error) {
-          console.warn('Oficios remotos no disponibles, operando en modo local:', error.message);
-          return;
+        if (!res1.error && res1.data) {
+          data = res1.data;
+        } else {
+          // Intento 2: consulta directa sin forzar join
+          const res2 = await supabase
+            .from('oficios_locales')
+            .select('*, resenas_servicios(*)')
+            .order('creado_en', { ascending: false });
+          if (!res2.error && res2.data) {
+            data = res2.data;
+          }
         }
 
         if (data && data.length > 0 && isMounted) {
@@ -76,13 +101,13 @@ export const ServiciosScreen = () => {
 
             return {
               id: item.id,
-              name: perfil.nombre || 'Vecino Emprendedor',
+              name: perfil.nombre || item.rol_oficio || 'Vecino Emprendedor',
               experience: item.experiencia || 'Vecino activo',
               role: item.rol_oficio || 'Servicio vecinal',
-              location: `${perfil.calle || 'Calle Los Sauces'} ${perfil.numero || 'S/N'} (${perfil.sector || 'Sector 2'})`,
+              location: perfil.calle ? `${perfil.calle} ${perfil.numero || ''} (${perfil.sector || 'Sector 2'})` : 'Urb. Las Palmeras',
               avatarUrl:
                 perfil.avatar_url ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nombre || 'V')}&background=0284c7&color=fff&bold=true`,
+                `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nombre || item.rol_oficio || 'V')}&background=0284c7&color=fff&bold=true`,
               recommendationsCount: item.recomendaciones ?? (perfil.vistos_buenos || 0),
               specialtyDetails: item.descripcion || item.rol_oficio || '',
               category: (item.categoria as ServiceCategoryType) || 'mantenimiento_hogar',
@@ -96,9 +121,10 @@ export const ServiciosScreen = () => {
           });
 
           setProviders((prev) => {
-            const remoteIds = new Set(remoteProviders.map((p) => p.id));
-            const mockFiltered = MOCK_PROVIDERS.filter((p) => !remoteIds.has(p.id));
-            return [...remoteProviders, ...mockFiltered];
+            const combined = [...remoteProviders, ...localSaved];
+            const seenIds = new Set(combined.map((p) => p.id));
+            const mockFiltered = MOCK_PROVIDERS.filter((p) => !seenIds.has(p.id));
+            return [...combined, ...mockFiltered];
           });
         }
       } catch (err) {
@@ -106,7 +132,7 @@ export const ServiciosScreen = () => {
       }
     };
 
-    loadOficiosFromSupabase();
+    loadOficios();
     return () => {
       isMounted = false;
     };
@@ -288,28 +314,54 @@ export const ServiciosScreen = () => {
     setNewDesc('');
     setNewColegiatura('');
 
-    // Si el usuario está registrado en Supabase, lo guardamos en la tabla oficios_locales
+    // 1. Guardar en AsyncStorage para persistencia local permanente (sobrevive al cerrar la app)
+    AsyncStorage.getItem('@user_local_services')
+      .then((raw) => {
+        const list: ServiceProvider[] = raw ? JSON.parse(raw) : [];
+        const updated = [nuevoServicio, ...list.filter((s) => s.id !== nuevoServicio.id)];
+        return AsyncStorage.setItem('@user_local_services', JSON.stringify(updated));
+      })
+      .catch((e) => console.warn('Error guardando oficio en AsyncStorage:', e));
+
+    // 2. Si el usuario está registrado en Supabase, lo guardamos en la nube
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id);
     if (supabase && isUuid) {
       (async () => {
         try {
-          const { error } = await supabase
-            .from('oficios_locales')
-            .insert({
-              vecino_id: currentUser.id,
-              categoria: nuevoServicio.category,
-              tipo_actividad: nuevoServicio.tipoActividad,
-              rol_oficio: nuevoServicio.role,
-              experiencia: nuevoServicio.experience,
-              colegiatura: nuevoServicio.colegiatura || null,
-              verificado: nuevoServicio.verified,
-              descripcion: nuevoServicio.specialtyDetails,
-              recomendaciones: nuevoServicio.recommendationsCount,
-              service_pin: nuevoServicio.servicePin,
-              ubicacion: 'SRID=4326;POINT(-77.0754 -11.8675)',
-            });
+          // Asegurar primero que el usuario exista en public.perfiles para evitar error de Foreign Key
+          await supabase.from('perfiles').upsert(
+            {
+              id: currentUser.id,
+              nombre: currentUser.name,
+              telefono: currentUser.phone,
+              rol: currentUser.role,
+              urbanizacion: currentUser.urbanizacion,
+              sector: currentUser.sector,
+              calle: currentUser.calle,
+              numero: currentUser.numero,
+              service_pin: currentUser.servicePin,
+              ubicacion: 'POINT(-77.0754 -11.8675)',
+            },
+            { onConflict: 'id' }
+          );
+
+          // Insertar en oficios_locales con coordenadas en formato Point estándar
+          const { error } = await supabase.from('oficios_locales').insert({
+            vecino_id: currentUser.id,
+            categoria: nuevoServicio.category,
+            tipo_actividad: nuevoServicio.tipoActividad,
+            rol_oficio: nuevoServicio.role,
+            experiencia: nuevoServicio.experience,
+            colegiatura: nuevoServicio.colegiatura || null,
+            verificado: nuevoServicio.verified,
+            descripcion: nuevoServicio.specialtyDetails,
+            recomendaciones: nuevoServicio.recommendationsCount,
+            service_pin: nuevoServicio.servicePin,
+            ubicacion: 'POINT(-77.0754 -11.8675)',
+          });
+
           if (error) {
-            console.warn('Aviso: servicio guardado localmente, error en nube:', error.message);
+            console.warn('Aviso al guardar en Supabase oficios_locales:', error.message);
           }
         } catch (err) {
           console.warn('Error al guardar oficio en Supabase:', err);

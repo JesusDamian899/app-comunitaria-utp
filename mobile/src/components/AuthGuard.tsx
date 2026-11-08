@@ -41,7 +41,7 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
 
     // Intentamos leer primero de la tabla public.perfiles en Supabase
     let dbProfile: any = null;
-    if (supabase) {
+    if (supabase && user.id) {
       try {
         const { data, error } = await supabase
           .from('perfiles')
@@ -50,6 +50,26 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
           .maybeSingle();
         if (!error && data) {
           dbProfile = data;
+        } else {
+          // Si el registro aún no existe en public.perfiles, lo creamos para que los oficios y favores se vinculen sin error
+          const perfilToInsert = {
+            id: user.id,
+            nombre: meta.nombre || user.email?.split('@')[0] || 'Vecino',
+            telefono: meta.telefono || '999 888 777',
+            rol: user.app_metadata?.community_role === 'Junta Vecinal' ? 'Junta Vecinal' : 'Vecino Residente',
+            urbanizacion: meta.urbanizacion || 'Urb. Las Palmeras',
+            sector: meta.sector || 'Sector 2 • Mz. B',
+            calle: meta.calle || 'Calle Los Sauces',
+            numero: meta.numero || 'S/N',
+            service_pin: meta.service_pin || '4826',
+            ubicacion: 'POINT(-77.0754 -11.8675)',
+          };
+          const { data: created } = await supabase
+            .from('perfiles')
+            .upsert(perfilToInsert, { onConflict: 'id' })
+            .select()
+            .maybeSingle();
+          if (created) dbProfile = created;
         }
       } catch (err) {
         console.warn('Lectura de perfil en Supabase no disponible, usando metadatos locales:', err);
