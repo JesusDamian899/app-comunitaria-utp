@@ -41,7 +41,7 @@ const CATEGORIES_NORMAL: { id: ServiceCategoryType; label: string; icon: string 
 ];
 
 const CATEGORIES_CRISIS: { id: ServiceCategoryType; label: string; icon: string }[] = [
-  { id: 'todos', label: 'Todas las Brigadas', icon: 'shield-alert' },
+  { id: 'todos', label: 'Todas las Brigadas', icon: 'shield' },
   { id: 'salud_bienestar', label: 'Enfermería & Primeros Auxilios', icon: 'medkit' },
   { id: 'mantenimiento_hogar', label: 'Gasfitería & Fugas de Agua', icon: 'water' },
   { id: 'servicios_tramites', label: 'Electricidad de Emergencia', icon: 'flash' },
