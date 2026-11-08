@@ -7,10 +7,10 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
+  ScrollView,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 
 interface TutorialModalProps {
   visible: boolean;
@@ -19,175 +19,44 @@ interface TutorialModalProps {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-interface StepConfig {
+interface ShowcaseStep {
   id: string;
   badge: string;
   badgeColor: string;
+  locationTag: string;
+  locationIcon: string;
   title: string;
-  highlightText: string;
+  subtitle: string;
   description: string;
-  actionHint: string;
-  pointerEmoji: string;
-  pointerPlacement: 'above-target' | 'below-target';
-  getSpotlight: (insets: { top: number; bottom: number }) => {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    r: number;
-  };
-  cardPlacement: 'below' | 'above';
+  highlightBenefit: string;
+  renderInteractiveDemo: (pulseAnim: Animated.Value) => React.ReactNode;
 }
 
-const STEPS: StepConfig[] = [
-  {
-    id: 'step-radios',
-    badge: 'PASO 1 DE 5 · HIPERLOCAL',
-    badgeColor: '#1d4ed8',
-    title: 'Selector de Radio: Todo a 500m',
-    highlightText: '📍 Filtra por cercanía a tu casa',
-    description:
-      'Encuentra gasfiteros, electricistas y favores a menos de 500 metros. Resuelve tus necesidades caminando en tu misma manzana, sin gastar en transporte.',
-    actionHint: 'Toca "Siguiente" para conocer la validación de servicios',
-    pointerEmoji: '👆',
-    pointerPlacement: 'below-target',
-    cardPlacement: 'below',
-    getSpotlight: (insets) => {
-      const topPadding = Math.max(insets.top, 10) + 6;
-      return {
-        x: 14,
-        y: topPadding + 46,
-        w: SCREEN_WIDTH * 0.65,
-        h: 40,
-        r: 10,
-      };
-    },
-  },
-  {
-    id: 'step-servicios',
-    badge: 'PASO 2 DE 5 · CONFIANZA',
-    badgeColor: '#0284c7',
-    title: 'Oficios Validados con PIN',
-    highlightText: '🔧 Pestaña Servicios & Oficios',
-    description:
-      'Cada vecino tiene un PIN secreto de 4 dígitos. Cuando el especialista termina su labor, tú le das tu PIN para confirmar que el trabajo fue real y dejarle un Visto Bueno auténtico.',
-    actionHint: 'Toca "Siguiente" para ver el Mapa Comunitario',
-    pointerEmoji: '👇',
-    pointerPlacement: 'above-target',
-    cardPlacement: 'above',
-    getSpotlight: (insets) => {
-      const tabWidth = SCREEN_WIDTH / 5;
-      const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
-      return {
-        x: tabWidth * 1 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
-        w: tabWidth - 4,
-        h: 50,
-        r: 12,
-      };
-    },
-  },
-  {
-    id: 'step-mapa',
-    badge: 'PASO 3 DE 5 · GEOLOCALIZACIÓN',
-    badgeColor: '#2563eb',
-    title: 'Mapa Interactivo Camaleónico',
-    highlightText: '🗺️ Pestaña Mapa Comunitario',
-    description:
-      'Ubica en vivo los oficios y favores del barrio. Y si ocurre un sismo o corte de agua, el mapa evoluciona automáticamente a vista táctica con albergues y zonas seguras.',
-    actionHint: 'Toca "Siguiente" para descubrir la Cadena de Favores',
-    pointerEmoji: '👇',
-    pointerPlacement: 'above-target',
-    cardPlacement: 'above',
-    getSpotlight: (insets) => {
-      const tabWidth = SCREEN_WIDTH / 5;
-      const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
-      return {
-        x: tabWidth * 2 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
-        w: tabWidth - 4,
-        h: 50,
-        r: 12,
-      };
-    },
-  },
-  {
-    id: 'step-solidaridad',
-    badge: 'PASO 4 DE 5 · ECONOMÍA SOLIDARIA',
-    badgeColor: '#059669',
-    title: 'Cadena de Favores Sin Dinero',
-    highlightText: '🤝 Muro Solidario & Préstamos',
-    description:
-      '¿Necesitas una escalera, un taladro o apoyo con tus compras? Pídelo prestado sin costo. Colaborar te suma puntos para subir de rango (🥉 Bronce hasta 🏆 Héroe del Barrio).',
-    actionHint: 'Toca "Siguiente" para conocer el botón de auxilio',
-    pointerEmoji: '👇',
-    pointerPlacement: 'above-target',
-    cardPlacement: 'above',
-    getSpotlight: (insets) => {
-      const tabWidth = SCREEN_WIDTH / 5;
-      const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
-      return {
-        x: tabWidth * 3 + 2,
-        y: SCREEN_HEIGHT - bottomPadding - 54,
-        w: tabWidth - 4,
-        h: 50,
-        r: 12,
-      };
-    },
-  },
-  {
-    id: 'step-sos',
-    badge: 'PASO 5 DE 5 · AUXILIO Y RESCATE',
-    badgeColor: '#dc2626',
-    title: 'Botón Flotante SOS Inmediato',
-    highlightText: '🚨 Auxilio Inmediato con GPS Offline',
-    description:
-      'En caso de robo, incendio, fuga de gas o sismo, mantén presionado este botón rojo. Enviará tu auxilio a la central y brigadistas, ¡incluso si te quedas sin internet!',
-    actionHint: '¡Listo! Ya conoces las herramientas para proteger y colaborar.',
-    pointerEmoji: '👉',
-    pointerPlacement: 'above-target',
-    cardPlacement: 'above',
-    getSpotlight: (insets) => {
-      const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
-      return {
-        x: SCREEN_WIDTH - 16 - 58,
-        y: SCREEN_HEIGHT - bottomPadding - 56 - 66,
-        w: 58,
-        h: 58,
-        r: 29,
-      };
-    },
-  },
-];
-
 export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
-  const insets = useSafeAreaInsets();
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
 
-  // Animaciones
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.9)).current;
-  const bounceAnim = useRef(new Animated.Value(0)).current;
-  const cardSlideAnim = useRef(new Animated.Value(16)).current;
-  const cardOpacityAnim = useRef(new Animated.Value(0)).current;
+  // Animaciones de escala, pulso y entrada de tarjeta
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Reiniciar estado siempre que el modal se abra
+  // Reiniciar estado cada vez que se abre el modal
   useEffect(() => {
     if (visible) {
       setCurrentStepIdx(0);
-      cardOpacityAnim.setValue(0);
-      cardSlideAnim.setValue(16);
+      slideAnim.setValue(16);
+      fadeAnim.setValue(0);
 
       Animated.parallel([
-        Animated.spring(cardSlideAnim, {
+        Animated.spring(slideAnim, {
           toValue: 0,
           friction: 8,
-          tension: 70,
+          tension: 65,
           useNativeDriver: true,
         }),
-        Animated.timing(cardOpacityAnim, {
+        Animated.timing(fadeAnim, {
           toValue: 1,
-          duration: 250,
+          duration: 220,
           useNativeDriver: true,
         }),
       ]).start();
@@ -198,86 +67,228 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
   useEffect(() => {
     if (!visible) return;
 
-    cardOpacityAnim.setValue(0);
-    cardSlideAnim.setValue(14);
+    slideAnim.setValue(14);
+    fadeAnim.setValue(0);
 
     Animated.parallel([
-      Animated.spring(cardSlideAnim, {
+      Animated.spring(slideAnim, {
         toValue: 0,
         friction: 8,
-        tension: 70,
+        tension: 65,
         useNativeDriver: true,
       }),
-      Animated.timing(cardOpacityAnim, {
+      Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 220,
+        duration: 200,
         useNativeDriver: true,
       }),
     ]).start();
   }, [currentStepIdx]);
 
-  // Loop de pulso y rebote del puntero
+  // Loop de pulso continuo sobre los elementos clave
   useEffect(() => {
     if (!visible) return;
 
     const pulseLoop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseScale, {
-            toValue: 1.25,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseScale, {
-            toValue: 1,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseOpacity, {
-            toValue: 0.1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseOpacity, {
-            toValue: 0.9,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-
-    const bounceLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(bounceAnim, {
-          toValue: -6,
-          duration: 500,
+        Animated.timing(pulseAnim, {
+          toValue: 1.08,
+          duration: 750,
           useNativeDriver: true,
         }),
-        Animated.timing(bounceAnim, {
-          toValue: 0,
-          duration: 500,
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 750,
           useNativeDriver: true,
         }),
       ])
     );
 
     pulseLoop.start();
-    bounceLoop.start();
-
-    return () => {
-      pulseLoop.stop();
-      bounceLoop.stop();
-    };
+    return () => pulseLoop.stop();
   }, [visible]);
 
   if (!visible) return null;
 
+  const STEPS: ShowcaseStep[] = [
+    {
+      id: 'radios',
+      badge: 'PASO 1 DE 5 · HIPERLOCAL',
+      badgeColor: '#1d4ed8',
+      locationTag: 'Arriba en la cabecera',
+      locationIcon: 'arrow-up-circle',
+      title: 'Selector de Radio: Todo a 500m',
+      subtitle: 'Encuentra soluciones a pocos pasos de tu casa',
+      description:
+        'Filtra oficios, servicios y favores a menos de 500 metros. Resuelve tus necesidades en tu misma manzana caminando, sin gastar en mototaxis ni pasajes.',
+      highlightBenefit: '💡 Diseñado para ahorrar costos de transporte al vecino',
+      renderInteractiveDemo: (pulse) => (
+        <View style={styles.demoBox}>
+          <Text style={styles.demoLabel}>SIMULADOR EN VIVO:</Text>
+          <View style={styles.radiosSimRow}>
+            <Text style={styles.radiosSimText}>Radio:</Text>
+            <Animated.View style={[styles.radioChipActive, { transform: [{ scale: pulse }] }]}>
+              <Text style={styles.radioChipActiveText}>📍 500m</Text>
+            </Animated.View>
+            <View style={styles.radioChipInactive}>
+              <Text style={styles.radioChipInactiveText}>2km</Text>
+            </View>
+            <View style={styles.radioChipInactive}>
+              <Text style={styles.radioChipInactiveText}>5km</Text>
+            </View>
+          </View>
+          <View style={styles.demoSubBadge}>
+            <Ionicons name="walk" size={14} color="#1d4ed8" />
+            <Text style={styles.demoSubBadgeText}>
+              Sector 2: A solo 3 minutos caminando (0 costo de transporte)
+            </Text>
+          </View>
+        </View>
+      ),
+    },
+    {
+      id: 'servicios',
+      badge: 'PASO 2 DE 5 · CONFIANZA VECINAL',
+      badgeColor: '#0284c7',
+      locationTag: 'Pestaña 2 en la barra inferior',
+      locationIcon: 'construct',
+      title: 'Oficios Validados con PIN',
+      subtitle: 'Evita recomendaciones falsas con seguridad real',
+      description:
+        'Cada vecino tiene un PIN secreto de 4 dígitos. Al concluir un trabajo, le entregas tu PIN al especialista para validar que el servicio fue 100% auténtico y otorgarle un "Visto Bueno".',
+      highlightBenefit: '🔒 A los 5 vistos buenos vecinales se activa el Check Azul ✓',
+      renderInteractiveDemo: (pulse) => (
+        <View style={styles.demoBox}>
+          <Text style={styles.demoLabel}>VALIDACIÓN CON PIN DE 4 DÍGITOS:</Text>
+          <View style={styles.pinSimRow}>
+            <View style={styles.pinDigitBox}><Text style={styles.pinDigitText}>3</Text></View>
+            <View style={styles.pinDigitBox}><Text style={styles.pinDigitText}>1</Text></View>
+            <View style={styles.pinDigitBox}><Text style={styles.pinDigitText}>5</Text></View>
+            <View style={styles.pinDigitBox}><Text style={styles.pinDigitText}>0</Text></View>
+            <Animated.View style={[styles.pinCheckBadge, { transform: [{ scale: pulse }] }]}>
+              <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
+              <Text style={styles.pinCheckText}>V°B° APROBADO</Text>
+            </Animated.View>
+          </View>
+          <Text style={styles.pinSubText}>
+            ✓ Solo vecinos residentes pueden certificar la reputación del técnico
+          </Text>
+        </View>
+      ),
+    },
+    {
+      id: 'mapa',
+      badge: 'PASO 3 DE 5 · GEOLOCALIZACIÓN',
+      badgeColor: '#2563eb',
+      locationTag: 'Pestaña central 3 en la barra inferior',
+      locationIcon: 'map',
+      title: 'Mapa Interactivo Camaleónico',
+      subtitle: 'Evoluciona del día a día a emergencias críticas',
+      description:
+        'En el día a día ves oficios y herramientas en el barrio. Y si ocurre un terremoto o contingencia, el mapa evoluciona al instante para guiarte a albergues, agua potable y auxilio.',
+      highlightBenefit: '🗺️ Funciona 100% online y offline con mapas en caché local',
+      renderInteractiveDemo: (pulse) => (
+        <View style={styles.demoBox}>
+          <Text style={styles.demoLabel}>EVOLUCIÓN EN TIEMPO REAL:</Text>
+          <View style={styles.mapDualRow}>
+            <View style={styles.mapDualSideBlue}>
+              <Ionicons name="sunny" size={14} color="#1d4ed8" />
+              <Text style={styles.mapDualSideTitle}>DÍA A DÍA</Text>
+              <Text style={styles.mapDualSideDesc}>🔧 Oficios & Favores</Text>
+            </View>
+            <Animated.View style={[styles.switchArrowBox, { transform: [{ scale: pulse }] }]}>
+              <Ionicons name="swap-horizontal" size={18} color="#0f172a" />
+            </Animated.View>
+            <View style={styles.mapDualSideRed}>
+              <Ionicons name="warning" size={14} color="#dc2626" />
+              <Text style={styles.mapDualSideTitleRed}>MODO CRISIS</Text>
+              <Text style={styles.mapDualSideDescRed}>🚨 Rescate & Agua</Text>
+            </View>
+          </View>
+          <Text style={styles.pinSubText}>
+            Cumple 100% el reto: la app evoluciona dinámicamente según el contexto
+          </Text>
+        </View>
+      ),
+    },
+    {
+      id: 'solidaridad',
+      badge: 'PASO 4 DE 5 · ECONOMÍA SOLIDARIA',
+      badgeColor: '#059669',
+      locationTag: 'Pestaña 4 en la barra inferior',
+      locationIcon: 'hand-heart',
+      title: 'Muro Solidario: Sin Dinero',
+      subtitle: 'Préstamos, donaciones y cadena de favores',
+      description:
+        '¿Necesitas una escalera de 6m o un taladro percutor? Pídelo prestado sin costo. Al ayudar a tus vecinos acumulas favores en tu perfil y ganas rangos de honor en el barrio.',
+      highlightBenefit: '🤝 Publica pedidos o préstamos en 2 clics con plantillas rápidas',
+      renderInteractiveDemo: (pulse) => (
+        <View style={styles.demoBox}>
+          <Text style={styles.demoLabel}>NIVELES DE HONOR COMUNITARIO:</Text>
+          <View style={styles.gamificationRow}>
+            <View style={styles.gamificationBadge}>
+              <Text style={styles.gamificationIcon}>🥉</Text>
+              <Text style={styles.gamificationName}>Bronce</Text>
+            </View>
+            <View style={styles.gamificationBadge}>
+              <Text style={styles.gamificationIcon}>🥈</Text>
+              <Text style={styles.gamificationName}>Plata</Text>
+            </View>
+            <View style={styles.gamificationBadge}>
+              <Text style={styles.gamificationIcon}>🥇</Text>
+              <Text style={styles.gamificationName}>Oro</Text>
+            </View>
+            <Animated.View
+              style={[
+                styles.gamificationBadgeHero,
+                { transform: [{ scale: pulse }] },
+              ]}
+            >
+              <Text style={styles.gamificationIcon}>🏆</Text>
+              <Text style={styles.gamificationNameHero}>Héroe</Text>
+            </Animated.View>
+          </View>
+          <Text style={styles.pinSubText}>
+            Incentiva la colaboración mutua vecinal sin depender de dinero en efectivo
+          </Text>
+        </View>
+      ),
+    },
+    {
+      id: 'sos',
+      badge: 'PASO 5 DE 5 · AUXILIO Y RESCATE',
+      badgeColor: '#dc2626',
+      locationTag: 'Botón flotante en la esquina inferior derecha',
+      locationIcon: 'alert-circle',
+      title: 'Botón Flotante SOS Inmediato',
+      subtitle: 'Alerta de pánico con geolocalización satelital',
+      description:
+        'En caso de robo, fuga de gas, incendio o sismo, presiona este botón rojo. Enviará de inmediato tu auxilio a la central y a los brigadistas, ¡incluso si te quedas sin internet!',
+      highlightBenefit: '📡 Funciona con SQLite offline y se sincroniza al recuperar señal',
+      renderInteractiveDemo: (pulse) => (
+        <View style={styles.demoBox}>
+          <Text style={styles.demoLabel}>BOTÓN DE PÁNICO TÁCTICO:</Text>
+          <View style={styles.sosSimRow}>
+            <Animated.View style={[styles.sosSimButton, { transform: [{ scale: pulse }] }]}>
+              <MaterialCommunityIcons name="asterisk" size={24} color="#ffffff" />
+              <Text style={styles.sosSimButtonText}>SOS</Text>
+            </Animated.View>
+            <View style={styles.sosSimInfo}>
+              <Text style={styles.sosSimInfoTitle}>DESPACHO INMEDIATO</Text>
+              <Text style={styles.sosSimInfoCoord}>📍 GPS: -11.8675, -77.0754</Text>
+              <Text style={styles.sosSimInfoSub}>SQLite Local ➔ Supabase en línea</Text>
+            </View>
+          </View>
+          <Text style={styles.pinSubText}>
+            Visible en todo momento desde cualquier pantalla con un solo toque
+          </Text>
+        </View>
+      ),
+    },
+  ];
+
   const step = STEPS[currentStepIdx];
   const isLast = currentStepIdx === STEPS.length - 1;
-  const spot = step.getSpotlight(insets);
 
   const handleNext = () => {
     if (!isLast) {
@@ -299,173 +310,108 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
     onClose();
   };
 
-  // Dimensiones del recorte / ventana transparente real
-  const topBoxHeight = Math.max(0, spot.y);
-  const bottomBoxTop = spot.y + spot.h;
-  const bottomBoxHeight = Math.max(0, SCREEN_HEIGHT - bottomBoxTop);
-  const leftBoxWidth = Math.max(0, spot.x);
-  const rightBoxLeft = spot.x + spot.w;
-  const rightBoxWidth = Math.max(0, SCREEN_WIDTH - rightBoxLeft);
-
-  const cardWidth = Math.min(SCREEN_WIDTH - 28, 400);
+  const cardWidth = Math.min(SCREEN_WIDTH - 28, 420);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleSkip}>
-      <View style={styles.container}>
-        {/* ============================================================ */}
-        {/* RECORTE REAL CON 4 PANELES OSCUROS (La app abajo queda 100% clara) */}
-        {/* ============================================================ */}
-        {/* Panel Superior */}
-        <View style={[styles.darkPanel, { top: 0, left: 0, right: 0, height: topBoxHeight }]} />
-
-        {/* Panel Inferior */}
-        <View style={[styles.darkPanel, { top: bottomBoxTop, left: 0, right: 0, height: bottomBoxHeight }]} />
-
-        {/* Panel Izquierdo */}
-        <View style={[styles.darkPanel, { top: spot.y, left: 0, width: leftBoxWidth, height: spot.h }]} />
-
-        {/* Panel Derecho */}
-        <View style={[styles.darkPanel, { top: spot.y, left: rightBoxLeft, width: rightBoxWidth, height: spot.h }]} />
-
-        {/* ============================================================ */}
-        {/* BARRA SUPERIOR: TÍTULO Y BOTÓN SALTAR */}
-        {/* ============================================================ */}
-        <View style={[styles.topBar, { top: Math.max(insets.top, 12) + 4 }]}>
-          <View style={styles.guideBadge}>
-            <Ionicons name="compass" size={13} color="#ffffff" style={{ marginRight: 4 }} />
-            <Text style={styles.guideBadgeText}>GUÍA DEL VECINO</Text>
+      <View style={styles.modalBackdrop}>
+        {/* Barra Superior Flotante: Indicador y Botón Saltar */}
+        <View style={styles.topHeaderBar}>
+          <View style={styles.topPill}>
+            <Ionicons name="sparkles" size={13} color="#ffffff" style={{ marginRight: 5 }} />
+            <Text style={styles.topPillText}>GUÍA INTERACTIVA DEL VECINO</Text>
           </View>
           <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.8}>
-            <Text style={styles.skipBtnText}>Saltar tour ✕</Text>
+            <Text style={styles.skipBtnText}>Cerrar ✕</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ============================================================ */}
-        {/* FOCO LUMINOSO / MARCO BRILLANTE SOBRE EL ELEMENTO DESTACADO */}
-        {/* ============================================================ */}
-        <View
-          pointerEvents="box-none"
-          style={[
-            styles.spotlightFrame,
-            {
-              top: spot.y,
-              left: spot.x,
-              width: spot.w,
-              height: spot.h,
-            },
-          ]}
-        >
-          {/* Anillo de pulso expansivo */}
-          <Animated.View
-            style={[
-              styles.pulseAura,
-              {
-                borderRadius: spot.r + 4,
-                borderColor: step.badgeColor,
-                transform: [{ scale: pulseScale }],
-                opacity: pulseOpacity,
-              },
-            ]}
-          />
-
-          {/* Borde brillante del recorte (Tocar aquí también avanza) */}
-          <TouchableOpacity
-            style={[
-              styles.cutoutBorder,
-              {
-                borderRadius: spot.r,
-                borderColor: step.badgeColor,
-              },
-            ]}
-            onPress={handleNext}
-            activeOpacity={0.9}
-          />
-
-          {/* Manito señalizadora animada */}
-          <Animated.View
-            style={[
-              styles.pointerEmojiBox,
-              step.pointerPlacement === 'above-target' ? styles.pointerAbove : styles.pointerBelow,
-              step.id === 'step-sos' && styles.pointerSosOffset,
-              { transform: [{ translateY: bounceAnim }] },
-            ]}
-          >
-            <Text style={styles.pointerEmojiText}>{step.pointerEmoji}</Text>
-          </Animated.View>
-        </View>
-
-        {/* ============================================================ */}
-        {/* TARJETA EXPLICATIVA COACHMARK (Posicionada arriba o abajo) */}
-        {/* ============================================================ */}
+        {/* Tarjeta Central Interactiva Adaptativa */}
         <Animated.View
           style={[
-            styles.cardContainer,
+            styles.cardWrapper,
             {
               width: cardWidth,
-              opacity: cardOpacityAnim,
-              transform: [{ translateY: cardSlideAnim }],
-              ...(step.cardPlacement === 'below'
-                ? { top: spot.y + spot.h + 14 }
-                : { bottom: SCREEN_HEIGHT - spot.y + 14 }),
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
             },
           ]}
         >
           <View style={[styles.card, { borderTopColor: step.badgeColor }]}>
-            {/* Cabecera del paso */}
-            <View style={styles.cardHeader}>
+            {/* Cabecera del Paso */}
+            <View style={styles.cardHeaderRow}>
               <View style={[styles.stepBadge, { backgroundColor: step.badgeColor }]}>
                 <Text style={styles.stepBadgeText}>{step.badge}</Text>
               </View>
-              <View style={styles.stepCounterPill}>
-                <Text style={styles.stepCounterText}>
-                  {currentStepIdx + 1} / {STEPS.length}
+              <View style={styles.counterBadge}>
+                <Text style={styles.counterText}>
+                  {currentStepIdx + 1} de {STEPS.length}
                 </Text>
               </View>
             </View>
 
-            {/* Título y elemento enfocado */}
-            <Text style={styles.titleText}>{step.title}</Text>
-            <View style={styles.highlightRow}>
-              <Ionicons name="sparkles" size={13} color={step.badgeColor} />
-              <Text style={[styles.highlightText, { color: step.badgeColor }]}>
-                {step.highlightText}
-              </Text>
-            </View>
+            <ScrollView
+              style={styles.cardScroll}
+              contentContainerStyle={styles.cardScrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {/* Dónde se encuentra en la app */}
+              <View style={styles.locationPillRow}>
+                <Ionicons name={step.locationIcon as any} size={14} color={step.badgeColor} />
+                <Text style={[styles.locationPillText, { color: step.badgeColor }]}>
+                  Ubicación: {step.locationTag}
+                </Text>
+              </View>
 
-            {/* Explicación amigable */}
-            <Text style={styles.descText}>{step.description}</Text>
+              {/* Título y Subtítulo */}
+              <Text style={styles.titleText}>{step.title}</Text>
+              <Text style={styles.subtitleText}>{step.subtitle}</Text>
 
-            {/* Tip interactivo */}
-            <View style={styles.hintBox}>
-              <Ionicons name="bulb-outline" size={14} color="#0369a1" />
-              <Text style={styles.hintText}>{step.actionHint}</Text>
-            </View>
+              {/* Simulador Interactivo en Vivo */}
+              <View style={styles.demoContainer}>
+                {step.renderInteractiveDemo(pulseAnim)}
+              </View>
 
-            {/* Puntos de avance */}
+              {/* Explicación en lenguaje sencillo */}
+              <Text style={styles.descriptionText}>{step.description}</Text>
+
+              {/* Beneficio destacado */}
+              <View style={styles.benefitBox}>
+                <Text style={styles.benefitText}>{step.highlightBenefit}</Text>
+              </View>
+            </ScrollView>
+
+            {/* Puntos Indicadores de Progreso */}
             <View style={styles.dotsRow}>
               {STEPS.map((_, i) => (
-                <View
+                <TouchableOpacity
                   key={i}
-                  style={[
-                    styles.dot,
-                    i === currentStepIdx
-                      ? [styles.dotActive, { backgroundColor: step.badgeColor }]
-                      : styles.dotInactive,
-                  ]}
-                />
+                  onPress={() => setCurrentStepIdx(i)}
+                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                >
+                  <View
+                    style={[
+                      styles.dot,
+                      i === currentStepIdx
+                        ? [styles.dotActive, { backgroundColor: step.badgeColor }]
+                        : styles.dotInactive,
+                    ]}
+                  />
+                </TouchableOpacity>
               ))}
             </View>
 
-            {/* Botones de acción */}
-            <View style={styles.btnRow}>
+            {/* Botones de Navegación con Diseño Totalmente Antidesborde */}
+            <View style={styles.actionsRow}>
               {currentStepIdx > 0 && (
-                <TouchableOpacity style={styles.backButton} onPress={handlePrev} activeOpacity={0.8}>
-                  <Text style={styles.backButtonText}>← Anterior</Text>
+                <TouchableOpacity style={styles.prevBtn} onPress={handlePrev} activeOpacity={0.8}>
+                  <Text style={styles.prevBtnText}>← Anterior</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 style={[
-                  styles.nextButton,
+                  styles.nextBtn,
                   {
                     backgroundColor: step.badgeColor,
                     flex: currentStepIdx > 0 ? 1 : undefined,
@@ -475,8 +421,8 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
                 onPress={handleNext}
                 activeOpacity={0.85}
               >
-                <Text style={styles.nextButtonText}>
-                  {isLast ? '🎉 ¡Entendido, empezar ahora!' : 'Siguiente paso →'}
+                <Text style={styles.nextBtnText} numberOfLines={1}>
+                  {isLast ? '¡Comenzar ahora! 🚀' : 'Siguiente paso →'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -488,24 +434,24 @@ export const TutorialModal = ({ visible, onClose }: TutorialModalProps) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  modalBackdrop: {
     flex: 1,
-    position: 'relative',
+    backgroundColor: 'rgba(15, 23, 42, 0.82)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 14,
   },
-  darkPanel: {
+  topHeaderBar: {
     position: 'absolute',
-    backgroundColor: 'rgba(15, 23, 42, 0.78)',
-  },
-  topBar: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
+    top: Platform.OS === 'ios' ? 48 : 28,
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     zIndex: 999,
   },
-  guideBadge: {
+  topPill: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -515,17 +461,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  guideBadgeText: {
+  topPillText: {
     color: '#ffffff',
     fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   skipBtn: {
     backgroundColor: 'rgba(255, 255, 255, 0.22)',
     paddingHorizontal: 12,
     paddingVertical: 5,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
   },
@@ -534,83 +480,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-  spotlightFrame: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 200,
-  },
-  pulseAura: {
-    position: 'absolute',
-    top: -4,
-    left: -4,
-    right: -4,
-    bottom: -4,
-    borderWidth: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  cutoutBorder: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderWidth: 2.5,
-    shadowColor: '#ffffff',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  pointerEmojiBox: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 300,
-  },
-  pointerBelow: {
-    top: '100%',
-    marginTop: 6,
-  },
-  pointerAbove: {
-    bottom: '100%',
-    marginBottom: 6,
-  },
-  pointerSosOffset: {
-    bottom: '100%',
-    right: 14,
-    marginBottom: 4,
-  },
-  pointerEmojiText: {
-    fontSize: 26,
-  },
-  cardContainer: {
-    position: 'absolute',
+  cardWrapper: {
+    maxHeight: '88%',
     alignSelf: 'center',
-    zIndex: 350,
   },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 18,
     borderTopWidth: 5,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    elevation: 16,
   },
-  cardHeader: {
+  cardScroll: {
+    maxHeight: SCREEN_HEIGHT * 0.58,
+  },
+  cardScrollContent: {
+    paddingBottom: 4,
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   stepBadge: {
     paddingHorizontal: 9,
-    paddingVertical: 3.5,
+    paddingVertical: 4,
     borderRadius: 7,
   },
   stepBadgeText: {
@@ -619,64 +520,320 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.3,
   },
-  stepCounterPill: {
+  counterBadge: {
     backgroundColor: '#f1f5f9',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
   },
-  stepCounterText: {
+  counterText: {
     fontSize: 10.5,
     fontWeight: '800',
     color: '#475569',
   },
-  titleText: {
-    fontSize: 15.5,
-    fontWeight: '900',
-    color: '#0f172a',
-    marginBottom: 3,
-  },
-  highlightRow: {
+  locationPillRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  highlightText: {
-    fontSize: 11,
+  locationPillText: {
+    fontSize: 10.5,
     fontWeight: '800',
   },
-  descText: {
-    fontSize: 12.5,
-    lineHeight: 18,
-    color: '#334155',
-    fontWeight: '500',
+  titleText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0f172a',
+    lineHeight: 21,
+    marginBottom: 2,
+  },
+  subtitleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
     marginBottom: 10,
   },
-  hintBox: {
+  demoContainer: {
+    marginBottom: 10,
+  },
+  demoBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    padding: 10,
+  },
+  demoLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#64748b',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  radiosSimRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 12,
+    gap: 6,
+    marginBottom: 6,
   },
-  hintText: {
-    flex: 1,
-    fontSize: 10.5,
-    color: '#0369a1',
+  radiosSimText: {
+    fontSize: 11,
     fontWeight: '700',
+    color: '#475569',
+  },
+  radioChipActive: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#1d4ed8',
+  },
+  radioChipActiveText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  radioChipInactive: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  radioChipInactiveText: {
+    color: '#64748b',
+    fontSize: 10.5,
+    fontWeight: '700',
+  },
+  demoSubBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  demoSubBadgeText: {
+    flex: 1,
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#1e40af',
+  },
+  pinSimRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  pinDigitBox: {
+    width: 28,
+    height: 32,
+    borderRadius: 7,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#0284c7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinDigitText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  pinCheckBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  pinCheckText: {
+    color: '#ffffff',
+    fontSize: 9.5,
+    fontWeight: '900',
+  },
+  pinSubText: {
+    fontSize: 9.5,
+    color: '#64748b',
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  mapDualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  mapDualSideBlue: {
+    flex: 1,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    padding: 7,
+    alignItems: 'center',
+  },
+  mapDualSideTitle: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#1d4ed8',
+    marginTop: 2,
+  },
+  mapDualSideDesc: {
+    fontSize: 8.5,
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  switchArrowBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapDualSideRed: {
+    flex: 1,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 8,
+    padding: 7,
+    alignItems: 'center',
+  },
+  mapDualSideTitleRed: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#dc2626',
+    marginTop: 2,
+  },
+  mapDualSideDescRed: {
+    fontSize: 8.5,
+    color: '#ef4444',
+    fontWeight: '600',
+  },
+  gamificationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginBottom: 4,
+  },
+  gamificationBadge: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 8,
+    paddingVertical: 5,
+  },
+  gamificationBadgeHero: {
+    flex: 1.1,
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    borderRadius: 8,
+    paddingVertical: 5,
+  },
+  gamificationIcon: {
+    fontSize: 14,
+  },
+  gamificationName: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#475569',
+    marginTop: 2,
+  },
+  gamificationNameHero: {
+    fontSize: 8.5,
+    fontWeight: '900',
+    color: '#b45309',
+    marginTop: 2,
+  },
+  sosSimRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  sosSimButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  sosSimButtonText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '900',
+    marginTop: -2,
+  },
+  sosSimInfo: {
+    flex: 1,
+  },
+  sosSimInfoTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#991b1b',
+  },
+  sosSimInfoCoord: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginTop: 1,
+  },
+  sosSimInfoSub: {
+    fontSize: 8.5,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  descriptionText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#334155',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  benefitBox: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    marginBottom: 10,
+  },
+  benefitText: {
+    fontSize: 10,
+    color: '#15803d',
+    fontWeight: '700',
+    lineHeight: 14,
   },
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   dot: {
     height: 5,
@@ -689,12 +846,12 @@ const styles = StyleSheet.create({
     width: 5,
     backgroundColor: '#cbd5e1',
   },
-  btnRow: {
+  actionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  backButton: {
+  prevBtn: {
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 12,
@@ -702,12 +859,12 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     backgroundColor: '#f8fafc',
   },
-  backButtonText: {
-    fontSize: 12,
+  prevBtnText: {
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#475569',
   },
-  nextButton: {
+  nextBtn: {
     paddingVertical: 11,
     paddingHorizontal: 16,
     borderRadius: 12,
@@ -719,9 +876,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  nextButtonText: {
+  nextBtnText: {
     color: '#ffffff',
-    fontSize: 12.5,
+    fontSize: 12,
     fontWeight: '900',
   },
 });
