@@ -1,0 +1,336 @@
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { CURRENT_USER } from '../mock/data';
+import { CommunityBadge } from '../components/CommunityBadge';
+
+export const PerfilScreen = () => {
+  return (
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.contentContainer} 
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Cabecera de Perfil */}
+      <View style={styles.profileHeaderCard}>
+        <View style={styles.avatarRow}>
+          <View style={styles.avatarWrapper}>
+            <Image source={{ uri: CURRENT_USER.avatarUrl }} style={styles.avatar} />
+            <View style={styles.verifiedCheck}>
+              <Ionicons name="checkmark" size={12} color="#ffffff" />
+            </View>
+          </View>
+
+          <View style={styles.profileInfo}>
+            <Text style={styles.userName}>{CURRENT_USER.name}</Text>
+            <Text style={styles.userRole}>{CURRENT_USER.role}</Text>
+
+            <View style={styles.vistosBuenosChip}>
+              <Ionicons name="shield-checkmark" size={13} color="#15803d" />
+              <Text style={styles.vistosBuenosText}>Confianza (18 Vistos Buenos)</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.addressBox}>
+          <Text style={styles.addressText}>
+            📍 {CURRENT_USER.urbanizacion} • {CURRENT_USER.calle} {CURRENT_USER.numero} ({CURRENT_USER.sector})
+          </Text>
+          <Text style={styles.phoneText}>📞 {CURRENT_USER.phone}</Text>
+        </View>
+      </View>
+
+      {/* REQUISITO: PIN de 4 dígitos para validar servicios */}
+      <View style={styles.pinCard}>
+        <View style={styles.pinCardLeft}>
+          <View style={styles.pinIconBg}>
+            <Ionicons name="key" size={20} color="#854d0e" />
+          </View>
+          <View style={styles.pinTextContainer}>
+            <Text style={styles.pinTitle}>Mi PIN de Servicios</Text>
+            <Text style={styles.pinSubtitle}>
+              Compártelo a tus vecinos para validar trabajos y recibir recomendaciones.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.pinBadge}>
+          <Text style={styles.pinDigits}>{CURRENT_USER.servicePin || '4826'}</Text>
+        </View>
+      </View>
+
+      {/* Estatus Comunitario (Gamificación) */}
+      <View style={styles.gamificationCard}>
+        <View style={styles.gamificationHeader}>
+          <View style={styles.gamificationHeaderLeft}>
+            <MaterialCommunityIcons name="trophy-award" size={22} color="#b45309" />
+            <Text style={styles.gamificationTitle}>Mi Estatus Comunitario</Text>
+          </View>
+          <CommunityBadge level="plata" size="sm" />
+        </View>
+
+        <Text style={styles.gamificationScore}>
+          Has completado <Text style={styles.boldScore}>7 favores</Text> este mes. ¡Estás a 3 favores de alcanzar el nivel <Text style={styles.boldGold}>ORO</Text>!
+        </Text>
+
+        {/* Barra de Progreso */}
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, { width: '70%' }]} />
+        </View>
+
+        {/* Niveles oficiales de estatus */}
+        <View style={styles.levelsList}>
+          <View style={styles.levelRow}>
+            <CommunityBadge level="bronce" size="xs" />
+            <Text style={styles.levelDesc}>1 a 4 favores (Nivel Inicial)</Text>
+          </View>
+          <View style={styles.levelRow}>
+            <CommunityBadge level="plata" size="xs" />
+            <Text style={styles.levelDesc}>5 a 9 favores (Vecino Solidario)</Text>
+          </View>
+          <View style={styles.levelRow}>
+            <CommunityBadge level="oro" size="xs" />
+            <Text style={styles.levelDesc}>10 a 19 favores (Vecino Ejemplar)</Text>
+          </View>
+          <View style={styles.levelRow}>
+            <CommunityBadge level="heroe_del_barrio" size="xs" />
+            <Text style={styles.levelDesc}>20 o más favores (Máxima Insignia)</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Margen final para no chocar con tab bar */}
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 24,
+  },
+  profileHeaderCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  avatarWrapper: {
+    position: 'relative',
+  },
+  avatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    borderColor: '#bfdbfe',
+  },
+  verifiedCheck: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    backgroundColor: '#2563eb',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  userRole: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  vistosBuenosChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  vistosBuenosText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15803d',
+  },
+  addressBox: {
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#f1f5f9',
+    gap: 4,
+  },
+  addressText: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  phoneText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  pinCard: {
+    backgroundColor: '#fffdf5',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#fde68a',
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    shadowColor: '#d97706',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  pinCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 10,
+  },
+  pinIconBg: {
+    backgroundColor: '#fef3c7',
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pinTextContainer: {
+    flex: 1,
+  },
+  pinTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#78350f',
+  },
+  pinSubtitle: {
+    fontSize: 10,
+    color: '#92400e',
+    fontWeight: '500',
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  pinBadge: {
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  pinDigits: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#ffffff',
+    letterSpacing: 2,
+  },
+  gamificationCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  gamificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  gamificationHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gamificationTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  gamificationScore: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 17,
+    marginBottom: 10,
+  },
+  boldScore: {
+    fontWeight: '900',
+    color: '#1d4ed8',
+  },
+  boldGold: {
+    fontWeight: '900',
+    color: '#d97706',
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#f59e0b',
+    borderRadius: 4,
+  },
+  levelsList: {
+    gap: 10,
+  },
+  levelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  levelDesc: {
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
+    flex: 1,
+  },
+});

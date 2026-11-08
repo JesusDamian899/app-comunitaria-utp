@@ -2,10 +2,12 @@
   "name": "app-comunitaria-utp",
   "version": "1.0.0",
   "private": true,
-  "description": "Aplicativo Comunitario Residencial - Vecinos",
+  "description": "Aplicativo Comunitario Residencial - Vecinos (React Native con Expo Go)",
   "scripts": {
-    "dev": "npm --prefix frontend run dev",
-    "build": "npm --prefix frontend run build",
-    "preview": "npm --prefix frontend run preview"
+    "start": "npm --prefix mobile run start",
+    "android": "npm --prefix mobile run android",
+    "ios": "npm --prefix mobile run ios",
+    "web": "npm --prefix mobile run web",
+    "mobile": "npm --prefix mobile run start"
   }
 }
