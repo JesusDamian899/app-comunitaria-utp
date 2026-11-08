@@ -65,8 +65,16 @@ export const ServiciosScreen = () => {
         localSaved = (await getLocalServicesFromSQLite()).filter((s) => !deletedIds.has(s.id));
         if (localSaved.length > 0 && isMounted) {
           setProviders((prev) => {
-            const ids = new Set(localSaved.map((s) => s.id));
-            return [...localSaved, ...prev.filter((p) => !ids.has(p.id) && !deletedIds.has(p.id))];
+            const rawList = [...localSaved, ...prev];
+            const unique: ServiceProvider[] = [];
+            const seen = new Set<string>();
+            for (const item of rawList) {
+              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
+                seen.add(item.id);
+                unique.push(item);
+              }
+            }
+            return unique;
           });
         }
       } catch (e) {
@@ -132,10 +140,16 @@ export const ServiciosScreen = () => {
             });
 
           setProviders((prev) => {
-            const combined = [...remoteProviders, ...localSaved];
-            const seenIds = new Set(combined.map((p) => p.id));
-            const mockFiltered = MOCK_PROVIDERS.filter((p) => !seenIds.has(p.id) && !deletedIds.has(p.id));
-            return [...combined, ...mockFiltered];
+            const rawList = [...remoteProviders, ...localSaved, ...prev, ...MOCK_PROVIDERS];
+            const unique: ServiceProvider[] = [];
+            const seen = new Set<string>();
+            for (const item of rawList) {
+              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
+                seen.add(item.id);
+                unique.push(item);
+              }
+            }
+            return unique;
           });
         }
       } catch (err) {
@@ -180,7 +194,7 @@ export const ServiciosScreen = () => {
   const [editPhone, setEditPhone] = useState('');
 
   const filteredProviders = useMemo(() => {
-    return providers
+    const sorted = providers
       .filter((p) => {
         const matchesCat = selectedCategory === 'todos' || p.category === selectedCategory;
         const q = searchQuery.toLowerCase().trim();
@@ -198,6 +212,17 @@ export const ServiciosScreen = () => {
         if (bTop !== aTop) return bTop - aTop;
         return b.recommendationsCount - a.recommendationsCount;
       });
+
+    // Filtro de unicidad estricta para garantizar que ningún ID se repita en React
+    const unique: ServiceProvider[] = [];
+    const seen = new Set<string>();
+    for (const item of sorted) {
+      if (item && item.id && !seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
+      }
+    }
+    return unique;
   }, [providers, searchQuery, selectedCategory]);
 
   const handleOpenWhatsapp = (provider: ServiceProvider) => {

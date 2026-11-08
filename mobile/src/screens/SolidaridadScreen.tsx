@@ -65,8 +65,16 @@ export const SolidaridadScreen = () => {
         localSaved = (await getLocalFavoresFromSQLite()).filter((f) => !deletedIds.has(f.id));
         if (localSaved.length > 0 && isMounted) {
           setFavores((prev) => {
-            const ids = new Set(localSaved.map((f) => f.id));
-            return [...localSaved, ...prev.filter((p) => !ids.has(p.id) && !deletedIds.has(p.id))];
+            const rawList = [...localSaved, ...prev];
+            const unique: SolidaridadFavor[] = [];
+            const seen = new Set<string>();
+            for (const item of rawList) {
+              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
+                seen.add(item.id);
+                unique.push(item);
+              }
+            }
+            return unique;
           });
         }
       } catch (e) {
@@ -141,10 +149,16 @@ export const SolidaridadScreen = () => {
             });
 
           setFavores((prev) => {
-            const combined = [...remoteFavores, ...localSaved];
-            const seenIds = new Set(combined.map((f) => f.id));
-            const mockFiltered = MOCK_FAVORES.filter((f) => !seenIds.has(f.id) && !deletedIds.has(f.id));
-            return [...combined, ...mockFiltered];
+            const rawList = [...remoteFavores, ...localSaved, ...prev, ...MOCK_FAVORES];
+            const unique: SolidaridadFavor[] = [];
+            const seen = new Set<string>();
+            for (const item of rawList) {
+              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
+                seen.add(item.id);
+                unique.push(item);
+              }
+            }
+            return unique;
           });
         }
       } catch (err) {
@@ -178,7 +192,7 @@ export const SolidaridadScreen = () => {
   const [editEstado, setEditEstado] = useState<SolidaridadEstado>('disponible');
 
   const filteredFavores = useMemo(() => {
-    return favores.filter((f) => {
+    const list = favores.filter((f) => {
       const matchesCat =
         selectedCategory === 'todos' ||
         f.categoria === selectedCategory ||
@@ -194,6 +208,17 @@ export const SolidaridadScreen = () => {
 
       return matchesCat && matchesQ;
     });
+
+    // Filtro de unicidad estricta para garantizar que ningún ID se repita en React
+    const unique: SolidaridadFavor[] = [];
+    const seen = new Set<string>();
+    for (const item of list) {
+      if (item && item.id && !seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
+      }
+    }
+    return unique;
   }, [favores, searchQuery, selectedCategory]);
 
   const handleOpenWhatsapp = (favor: SolidaridadFavor) => {
