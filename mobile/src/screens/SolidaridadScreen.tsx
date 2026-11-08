@@ -10,7 +10,8 @@ import {
   Modal, 
   Linking,
   KeyboardAvoidingView,
-  Platform 
+  Platform,
+  Alert 
 } from 'react-native';
 import { 
   Ionicons, 
@@ -19,7 +20,7 @@ import {
   MaterialIcons 
 } from '@expo/vector-icons';
 import { MOCK_FAVORES } from '../mock/data';
-import type { SolidaridadFavor, SolidaridadCategory } from '../types';
+import type { SolidaridadFavor, SolidaridadCategory, SolidaridadEstado } from '../types';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
@@ -27,7 +28,10 @@ import { supabase } from '../lib/supabaseClient';
 import { 
   saveLocalFavorToSQLite, 
   getLocalFavoresFromSQLite, 
-  updateFavorStatusInSQLite 
+  updateFavorStatusInSQLite,
+  updateLocalFavorDetailsInSQLite,
+  deleteFavorFromSQLite,
+  getDeletedRecordIdsFromSQLite 
 } from '../lib/sqliteDatabase';
 
 export type SolidaridadFilterType = 'todos' | SolidaridadCategory;
@@ -52,14 +56,17 @@ export const SolidaridadScreen = () => {
   useEffect(() => {
     let isMounted = true;
     const loadMuro = async () => {
+      // 0. Obtener IDs eliminados para no volver a mostrarlos
+      const deletedIds = await getDeletedRecordIdsFromSQLite();
+
       // 1. Cargar inmediatamente favores guardados en SQLite local
       let localSaved: SolidaridadFavor[] = [];
       try {
-        localSaved = await getLocalFavoresFromSQLite();
+        localSaved = (await getLocalFavoresFromSQLite()).filter((f) => !deletedIds.has(f.id));
         if (localSaved.length > 0 && isMounted) {
           setFavores((prev) => {
             const ids = new Set(localSaved.map((f) => f.id));
-            return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+            return [...localSaved, ...prev.filter((p) => !ids.has(p.id) && !deletedIds.has(p.id))];
           });
         }
       } catch (e) {
@@ -97,43 +104,46 @@ export const SolidaridadScreen = () => {
             intercambio_habilidades: 'Intercambio habilidades',
           };
 
-          const remoteFavores: SolidaridadFavor[] = data.map((item: any) => {
-            const perfil = item.perfiles || {};
-            const favCount = perfil.favores_realizados || 0;
-            const donorBadgeLevel = getCommunityStatusLevel(favCount);
+          const remoteFavores: SolidaridadFavor[] = data
+            .filter((item: any) => !deletedIds.has(item.id))
+            .map((item: any) => {
+              const perfil = item.perfiles || {};
+              const favCount = perfil.favores_realizados || 0;
+              const donorBadgeLevel = getCommunityStatusLevel(favCount);
 
-            return {
-              id: item.id,
-              type: item.tipo_solicitud,
-              categoria: item.tipo_solicitud as SolidaridadCategory,
-              badgeTag: categoryLabels[item.tipo_solicitud] || 'Solidaridad',
-              badgeTime: 'Reciente',
-              title: item.titulo || 'Apoyo solidario',
-              description: item.descripcion || '',
-              ownerName: perfil.nombre || item.titulo || 'Vecino Solidario',
-              ownerAvatarUrl:
-                perfil.avatar_url ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nombre || 'V')}&background=059669&color=fff&bold=true`,
-              location:
-                item.direccion_referencia ||
-                (perfil.calle ? `${perfil.calle} ${perfil.numero || ''}` : 'Urb. Las Palmeras'),
-              phone: perfil.telefono || '998765432',
-              actionButtonText: 'Pedir apoyo',
-              iconName:
-                item.tipo_solicitud === 'donacion'
-                  ? 'gift'
-                  : item.tipo_solicitud === 'acompanamiento'
-                  ? 'heart'
-                  : 'wrench',
-              estado: item.estado || 'disponible',
-              donorBadgeLevel,
-            };
-          });
+              return {
+                id: item.id,
+                ownerId: item.vecino_id || perfil.id,
+                type: item.tipo_solicitud,
+                categoria: item.tipo_solicitud as SolidaridadCategory,
+                badgeTag: categoryLabels[item.tipo_solicitud] || 'Solidaridad',
+                badgeTime: 'Reciente',
+                title: item.titulo || 'Apoyo solidario',
+                description: item.descripcion || '',
+                ownerName: perfil.nombre || item.titulo || 'Vecino Solidario',
+                ownerAvatarUrl:
+                  perfil.avatar_url ||
+                  `https://ui-avatars.com/api/?name=${encodeURIComponent(perfil.nombre || 'V')}&background=059669&color=fff&bold=true`,
+                location:
+                  item.direccion_referencia ||
+                  (perfil.calle ? `${perfil.calle} ${perfil.numero || ''}` : 'Urb. Las Palmeras'),
+                phone: perfil.telefono || '998765432',
+                actionButtonText: 'Pedir apoyo',
+                iconName:
+                  item.tipo_solicitud === 'donacion'
+                    ? 'gift'
+                    : item.tipo_solicitud === 'acompanamiento'
+                    ? 'heart'
+                    : 'wrench',
+                estado: item.estado || 'disponible',
+                donorBadgeLevel,
+              };
+            });
 
           setFavores((prev) => {
             const combined = [...remoteFavores, ...localSaved];
             const seenIds = new Set(combined.map((f) => f.id));
-            const mockFiltered = MOCK_FAVORES.filter((f) => !seenIds.has(f.id));
+            const mockFiltered = MOCK_FAVORES.filter((f) => !seenIds.has(f.id) && !deletedIds.has(f.id));
             return [...combined, ...mockFiltered];
           });
         }
@@ -156,6 +166,16 @@ export const SolidaridadScreen = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState<SolidaridadCategory>('prestamo');
+
+  // Modal Editar Favor (CRUD)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingFavor, setEditingFavor] = useState<SolidaridadFavor | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editCategory, setEditCategory] = useState<SolidaridadCategory>('prestamo');
+  const [editLocation, setEditLocation] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEstado, setEditEstado] = useState<SolidaridadEstado>('disponible');
 
   const filteredFavores = useMemo(() => {
     return favores.filter((f) => {
@@ -239,6 +259,7 @@ export const SolidaridadScreen = () => {
 
     const newFav: SolidaridadFavor = {
       id: `fav-${Date.now()}`,
+      ownerId: currentUser.id,
       type: newCategory,
       categoria: newCategory,
       badgeTag: categoryLabels[newCategory] || 'Solidaridad',
@@ -304,6 +325,108 @@ export const SolidaridadScreen = () => {
         }
       })();
     }
+  };
+
+  // ==========================================
+  // MÉTODOS CRUD: EDITAR Y ELIMINAR FAVORES
+  // ==========================================
+
+  const handleOpenEditFavor = (favor: SolidaridadFavor) => {
+    setEditingFavor(favor);
+    setEditTitle(favor.title);
+    setEditCategory((favor.categoria as SolidaridadCategory) || 'prestamo');
+    setEditDesc(favor.description || '');
+    setEditLocation(favor.location || `${currentUser.calle} ${currentUser.numero}`);
+    setEditPhone(favor.phone || currentUser.phone || '');
+    setEditEstado(favor.estado || 'disponible');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditFavor = async () => {
+    if (!editingFavor) return;
+    if (!editTitle.trim()) {
+      showToast('Ingresa un título para el favor o artículo');
+      return;
+    }
+
+    const categoryLabels: Record<SolidaridadCategory, string> = {
+      prestamo: 'Préstamo',
+      donacion: 'Donación',
+      acompanamiento: 'Acompañamiento',
+      intercambio_habilidades: 'Intercambio habilidades',
+    };
+
+    const updatedFavor: SolidaridadFavor = {
+      ...editingFavor,
+      title: editTitle.trim(),
+      type: editCategory,
+      categoria: editCategory,
+      badgeTag: categoryLabels[editCategory] || 'Solidaridad',
+      description: editDesc.trim() || `${editTitle.trim()}. Disponible para vecinos de la urbanización.`,
+      location: editLocation.trim() || `${currentUser.calle} ${currentUser.numero}`,
+      phone: editPhone.trim() || editingFavor.phone,
+      iconName: editCategory === 'donacion' ? 'gift' : editCategory === 'acompanamiento' ? 'heart' : 'wrench',
+      estado: editEstado,
+    };
+
+    setFavores((prev) => prev.map((f) => (f.id === updatedFavor.id ? updatedFavor : f)));
+    setIsEditModalOpen(false);
+    setEditingFavor(null);
+    showToast('✓ Publicación solidaria actualizada');
+
+    // 1. Guardar en SQLite local
+    await updateLocalFavorDetailsInSQLite(updatedFavor);
+
+    // 2. Si es Supabase UUID, actualizar en la nube
+    const isFavUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(updatedFavor.id);
+    if (supabase && isFavUuid) {
+      try {
+        await supabase
+          .from('muro_solidario')
+          .update({
+            titulo: updatedFavor.title,
+            tipo_solicitud: updatedFavor.categoria,
+            descripcion: updatedFavor.description,
+            direccion_referencia: updatedFavor.location,
+            estado: updatedFavor.estado,
+          })
+          .eq('id', updatedFavor.id);
+      } catch (err) {
+        console.warn('Error al actualizar favor en Supabase:', err);
+      }
+    }
+  };
+
+  const handleDeleteFavor = (favor: SolidaridadFavor) => {
+    Alert.alert(
+      'Eliminar Publicación',
+      `¿Deseas eliminar "${favor.title}" del Muro Solidario?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            // 1. Quitar de React state
+            setFavores((prev) => prev.filter((f) => f.id !== favor.id));
+            showToast('✓ Publicación eliminada del muro');
+
+            // 2. Eliminar de SQLite y registrar en deleted_records
+            await deleteFavorFromSQLite(favor.id);
+
+            // 3. Eliminar de Supabase si corresponde
+            const isFavUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(favor.id);
+            if (supabase && isFavUuid) {
+              try {
+                await supabase.from('muro_solidario').delete().eq('id', favor.id);
+              } catch (err) {
+                console.warn('Error al eliminar favor en Supabase:', err);
+              }
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -399,6 +522,12 @@ export const SolidaridadScreen = () => {
         const defaultAvatar =
           favor.ownerAvatarUrl ||
           'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
+        const isOwner =
+          favor.ownerId === currentUser.id ||
+          favor.ownerName === currentUser.name ||
+          favor.phone === currentUser.phone ||
+          favor.id.startsWith('fav-') ||
+          currentUser.role === 'Junta Vecinal';
 
         const categoryLabel = {
           prestamo: 'Préstamo',
@@ -428,6 +557,39 @@ export const SolidaridadScreen = () => {
                 <Text style={styles.categoryPillText}>{categoryLabel}</Text>
               </View>
             </View>
+
+            {/* Barra de Gestión CRUD para el Vecino Propietario o Junta */}
+            {isOwner && (
+              <View style={styles.ownerActionsBar}>
+                <View style={styles.ownerBadge}>
+                  <Ionicons name="person" size={11} color="#1d4ed8" />
+                  <Text style={styles.ownerBadgeText}>
+                    {currentUser.role === 'Junta Vecinal' && favor.ownerName !== currentUser.name
+                      ? 'Gestión Junta'
+                      : 'Mi Publicación'}
+                  </Text>
+                </View>
+                <View style={styles.ownerButtonsGroup}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => handleOpenEditFavor(favor)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="pencil" size={13} color="#2563eb" />
+                    <Text style={styles.editBtnText}>Editar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteFavor(favor)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="trash" size={13} color="#dc2626" />
+                    <Text style={styles.deleteBtnText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Fila de Confianza Presumida */}
             <View style={styles.trustBadgeRow}>
@@ -577,6 +739,144 @@ export const SolidaridadScreen = () => {
               <TouchableOpacity style={styles.createFavorButton} onPress={handleCreateFavor} activeOpacity={0.85}>
                 <Text style={styles.createFavorButtonText}>Publicar en Muro Solidario</Text>
               </TouchableOpacity>
+              <View style={{ height: 20 }} />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Editar Mi Publicación en Solidaridad (CRUD) */}
+      <Modal visible={isEditModalOpen} transparent animationType="slide">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCardLarge}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ backgroundColor: '#eff6ff', padding: 6, borderRadius: 8 }}>
+                  <Ionicons name="pencil" size={18} color="#2563eb" />
+                </View>
+                <Text style={styles.modalTitle}>Editar Mi Publicación</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsEditModalOpen(false)}>
+                <Ionicons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>1. Categoría</Text>
+              <View style={styles.catGrid}>
+                {[
+                  { id: 'prestamo', label: 'Préstamo' },
+                  { id: 'donacion', label: 'Donación' },
+                  { id: 'acompanamiento', label: 'Acompañamiento' },
+                  { id: 'intercambio_habilidades', label: 'Intercambio habilidades' },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.modalCatOption,
+                      editCategory === item.id && styles.modalCatOptionActive,
+                    ]}
+                    onPress={() => setEditCategory(item.id as SolidaridadCategory)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.modalCatText,
+                        editCategory === item.id && styles.modalCatTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>2. Título del Artículo o Favor</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: Préstamo de escalera, Donación de libros..."
+                placeholderTextColor="#94a3b8"
+                value={editTitle}
+                onChangeText={setEditTitle}
+              />
+
+              <Text style={styles.inputLabel}>3. Descripción y Condiciones de Uso</Text>
+              <TextInput
+                style={[styles.textInput, { height: 80, textAlignVertical: 'top' }]}
+                multiline
+                placeholder="Describe el estado del objeto, tiempo de préstamo o cómo puedes ayudar..."
+                placeholderTextColor="#94a3b8"
+                value={editDesc}
+                onChangeText={setEditDesc}
+              />
+
+              <Text style={styles.inputLabel}>4. Ubicación o Referencia</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: Jr. Los Pinos 240 (Mz. B)"
+                placeholderTextColor="#94a3b8"
+                value={editLocation}
+                onChangeText={setEditLocation}
+              />
+
+              <Text style={styles.inputLabel}>5. Teléfono de Contacto (WhatsApp)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: 999 888 777"
+                keyboardType="phone-pad"
+                value={editPhone}
+                onChangeText={setEditPhone}
+              />
+
+              <Text style={styles.inputLabel}>6. Estado de la Publicación</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                {[
+                  { id: 'disponible', label: 'Disponible' },
+                  { id: 'ayuda_solicitada', label: 'En Proceso' },
+                  { id: 'recibido', label: 'Concluido' },
+                ].map((st) => (
+                  <TouchableOpacity
+                    key={st.id}
+                    style={[
+                      styles.modalCatOption,
+                      { flex: 1, paddingVertical: 8 },
+                      editEstado === st.id && styles.modalCatOptionActive,
+                    ]}
+                    onPress={() => setEditEstado(st.id as SolidaridadEstado)}
+                  >
+                    <Text
+                      style={[
+                        styles.modalCatText,
+                        { fontSize: 11 },
+                        editEstado === st.id && styles.modalCatTextActive,
+                      ]}
+                    >
+                      {st.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.createFavorButton, { flex: 1, backgroundColor: '#f1f5f9' }]}
+                  onPress={() => setIsEditModalOpen(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.createFavorButtonText, { color: '#475569' }]}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.createFavorButton, { flex: 2 }]}
+                  onPress={handleSaveEditFavor}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.createFavorButtonText}>Guardar Cambios</Text>
+                </TouchableOpacity>
+              </View>
               <View style={{ height: 20 }} />
             </ScrollView>
           </View>
@@ -1025,5 +1325,72 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',
+  },
+  ownerActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 8,
+  },
+  ownerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  ownerBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  ownerButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  editBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  deleteBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
   },
 });

@@ -93,6 +93,8 @@ export interface ServiceProvider {
   servicePin?: string; // PIN de 4 dígitos para que el cliente valide la recomendación
   reviews: ServiceReview[];
   phone: string;
+  ownerId?: string;
+  tarifa?: number;
 }
 
 export type SolidaridadEstado = 'disponible' | 'ayuda_solicitada' | 'recibido';
@@ -136,6 +138,7 @@ export interface SolidaridadFavor {
   iconName: 'wrench' | 'plant' | 'users' | 'heart' | 'gift' | 'arrow-left-right' | 'sparkles' | 'award';
   estado?: SolidaridadEstado;
   donorBadgeLevel?: CommunityStatusLevel;
+  ownerId?: string;
 }
 
 export interface EmergencyDirectCall {
