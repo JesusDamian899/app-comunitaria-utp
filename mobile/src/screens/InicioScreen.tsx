@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { FontAwesome5, Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { MOCK_TOP_VECINOS_DEL_MES, MOCK_CONVOCATORIA, MOCK_MANTENIMIENTO, MOCK_ACTA } from '../mock/data';
+import { CURRENT_USER, MOCK_TOP_VECINOS_DEL_MES, MOCK_CONVOCATORIA, MOCK_MANTENIMIENTO, MOCK_ACTA } from '../mock/data';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
@@ -9,7 +9,7 @@ import { useAuth } from '../components/AuthGuard';
 export const InicioScreen = () => {
   const { hasConfirmedAttendance, toggleAttendance, attendeesCount, showToast } = useApp();
   const { currentUser } = useAuth();
-  const firstName = currentUser.name.split(' ')[0] || currentUser.name;
+  const firstName = (currentUser?.name || CURRENT_USER.name).split(' ')[0];
 
   const first = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 1);
   const second = MOCK_TOP_VECINOS_DEL_MES.find((v) => v.position === 2);
