@@ -42,7 +42,8 @@ export const ServiciosScreen = () => {
 
   // Estados de WhatsApp contactado por proveedor
   const [contactedMap, setContactedMap] = useState<Record<string, boolean>>({});
-
+  const [ratedMap, setRatedMap] = useState<Record<string, boolean>>({});
+  const [newColegiatura, setNewColegiatura] = useState('');
   // Modal Recomendar con PIN
   const [recommendingProvider, setRecommendingProvider] = useState<ServiceProvider | null>(null);
   const [inputPin, setInputPin] = useState('');
@@ -91,7 +92,7 @@ export const ServiciosScreen = () => {
     }
   };
 
-  const handleSubmitRecommendation = () => {
+    const handleSubmitRecommendation = () => {
     if (!recommendingProvider) return;
     if (thumbsRating === null) {
       showToast('Selecciona si recomiendas o no el servicio.');
@@ -110,6 +111,10 @@ export const ServiciosScreen = () => {
           : p
       )
     );
+    // Marcamos este servicio como ya calificado y cerramos el ciclo de contacto
+    setRatedMap((prev) => ({ ...prev, [recommendingProvider.id]: true }));
+    setContactedMap((prev) => ({ ...prev, [recommendingProvider.id]: false }));
+
     showToast('¡Calificación vecinal registrada con éxito!');
     setRecommendingProvider(null);
     setInputPin('');
@@ -128,12 +133,39 @@ export const ServiciosScreen = () => {
       showToast('Ingresa el nombre o especialidad del servicio');
       return;
     }
+    if (newTipo === 'profesion' && !newColegiatura.trim()) {
+      showToast('Para una Profesión acreditada debes indicar tu N° de Colegiatura');
+      return;
+    }
 
-    showToast('⏳ Esperando aprobación de administrador al publicar.');
+    // Agregamos el servicio al directorio con los datos y el PIN real del usuario logueado
+    const nuevoServicio: ServiceProvider = {
+      id: `prov-${Date.now()}`,
+      name: CURRENT_USER.name,
+      experience: 'Vecino activo',
+      role: newTitle.trim(),
+      location: `${CURRENT_USER.calle} ${CURRENT_USER.numero} (${CURRENT_USER.sector})`,
+      avatarUrl:
+        CURRENT_USER.avatarUrl ||
+        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
+      recommendationsCount: 0,
+      specialtyDetails: `${newDesc.trim() || newTitle.trim()} • Tarifa vecinal: S/. ${tarifaNum || 30}`,
+      category: selectedCategory === 'todos' ? 'mantenimiento_hogar' : selectedCategory,
+      tipoActividad: newTipo,
+      colegiatura: newTipo === 'profesion' ? newColegiatura.trim() : undefined,
+      verified: newTipo === 'profesion',
+      servicePin: CURRENT_USER.servicePin || '4826',
+      reviews: [],
+      phone: CURRENT_USER.phone,
+    };
+
+    setProviders((prev) => [nuevoServicio, ...prev]);
+    showToast(`✓ Servicio publicado con tu PIN ${nuevoServicio.servicePin}`);
     setIsCreateModalOpen(false);
     setNewTitle('');
     setNewTarifa('');
     setNewDesc('');
+    setNewColegiatura('');
   };
 
   return (
@@ -264,9 +296,38 @@ export const ServiciosScreen = () => {
               <Text style={styles.specialtyText}>{provider.specialtyDetails}</Text>
             </View>
 
-            {/* Botón WhatsApp transformable a ¿Recomiendas? */}
+                        {/* Botón WhatsApp -> Ingresar PIN -> Servicio Calificado */}
             <View style={styles.actionContainer}>
-              {!hasContacted ? (
+              {ratedMap[provider.id] && !hasContacted ? (
+                <View style={styles.contactedContainer}>
+                  <View
+                    style={{
+                      backgroundColor: '#f0fdf4',
+                      borderWidth: 1,
+                      borderColor: '#bbf7d0',
+                      borderRadius: 12,
+                      paddingVertical: 11,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+                    <Text style={{ color: '#15803d', fontWeight: '800', fontSize: 12 }}>
+                      ✓ Servicio Validado y Calificado
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleOpenWhatsapp(provider)}
+                    style={styles.recontactLink}
+                  >
+                    <Text style={styles.recontactLinkText}>
+                      ¿Solicitar un nuevo servicio por WhatsApp a {firstName}?
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : !hasContacted ? (
                 <TouchableOpacity
                   style={styles.whatsappButton}
                   onPress={() => handleOpenWhatsapp(provider)}
@@ -331,7 +392,7 @@ export const ServiciosScreen = () => {
                 </Text>
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="Ej: 3150"
+                  placeholder={`Ej: ${recommendingProvider?.servicePin || '3150'}`}
                   keyboardType="numeric"
                   maxLength={4}
                   value={inputPin}

@@ -1,10 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CURRENT_USER } from '../mock/data';
 import { CommunityBadge } from '../components/CommunityBadge';
+import { useAuth } from '../components/AuthGuard';
 
 export const PerfilScreen = () => {
+  const { logout } = useAuth();
+  const [showGuideModal, setShowGuideModal] = useState(false);
   return (
     <ScrollView 
       style={styles.container} 
@@ -98,7 +101,79 @@ export const PerfilScreen = () => {
           </View>
         </View>
       </View>
+         {/* Opciones de Cuenta Simplificadas: ¿Cómo funciona la app? y Cerrar sesión */}
+   <View style={{
+     backgroundColor: '#ffffff',
+     borderRadius: 18,
+     borderWidth: 1,
+     borderColor: '#e2e8f0',
+     marginTop: 14,
+     overflow: 'hidden',
+   }}>
+     {/* 1. ¿Cómo funciona la app? */}
+     <TouchableOpacity
+       onPress={() => setShowGuideModal(true)}
+       activeOpacity={0.75}
+       style={{
+         flexDirection: 'row',
+         alignItems: 'center',
+         justifyContent: 'space-between',
+         padding: 15,
+         backgroundColor: '#eff6ff',
+         borderBottomWidth: 1,
+         borderBottomColor: '#e2e8f0',
+       }}
+     >
+       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+         <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#dbeafe', alignItems: 'center', justifyContent: 'center' }}>
+           <Ionicons name="help-circle" size={20} color="#1d4ed8" />
+         </View>
+         <View>
+           <Text style={{ fontSize: 13, fontWeight: '800', color: '#1e3a8a' }}>¿Cómo funciona la app?</Text>
+           <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '500' }}>Ver guía rápida de módulos y niveles</Text>
+         </View>
+       </View>
+       <Ionicons name="chevron-forward" size={18} color="#2563eb" />
+     </TouchableOpacity>
 
+     {/* 2. Cerrar sesión */}
+     <TouchableOpacity
+       onPress={logout}
+       activeOpacity={0.75}
+       style={{
+         flexDirection: 'row',
+         alignItems: 'center',
+         gap: 12,
+         padding: 15,
+       }}
+     >
+       <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#ffe4e6', alignItems: 'center', justifyContent: 'center' }}>
+         <Ionicons name="log-out-outline" size={19} color="#e11d48" />
+       </View>
+       <Text style={{ fontSize: 13, fontWeight: '800', color: '#e11d48' }}>Cerrar sesión</Text>
+     </TouchableOpacity>
+   </View>
+
+   {/* Modal Guía de la App */}
+   <Modal visible={showGuideModal} transparent animationType="fade">
+     <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'center', padding: 20 }}>
+       <View style={{ backgroundColor: '#ffffff', borderRadius: 20, padding: 20, gap: 10 }}>
+         <Text style={{ fontSize: 16, fontWeight: '900', color: '#0f172a' }}>Guía Rápida • Comunidad Vecinos</Text>
+         <Text style={{ fontSize: 12, color: '#475569', lineHeight: 18 }}>
+           • <Text style={{ fontWeight: '800' }}>Inicio:</Text> Avisos oficiales, mantenimiento y Vecino del Mes.{'\n'}
+           • <Text style={{ fontWeight: '800' }}>Servicios:</Text> Oficios y profesiones locales validados con tu PIN de 4 dígitos.{'\n'}
+           • <Text style={{ fontWeight: '800' }}>Solidaridad:</Text> Préstamos, donaciones y apoyo vecinal para subir de Bronce a Héroe del Barrio.{'\n'}
+           • <Text style={{ fontWeight: '800' }}>Botón SOS:</Text> Alerta individual o Modo Crisis Comunitaria por radios.
+         </Text>
+         <TouchableOpacity
+           onPress={() => setShowGuideModal(false)}
+           style={{ backgroundColor: '#1d4ed8', paddingVertical: 11, borderRadius: 12, alignItems: 'center', marginTop: 6 }}
+         >
+           <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>¡Entendido!</Text>
+         </TouchableOpacity>
+       </View>
+     </View>
+   </Modal>
       {/* Margen final para no chocar con tab bar */}
       <View style={{ height: 40 }} />
     </ScrollView>

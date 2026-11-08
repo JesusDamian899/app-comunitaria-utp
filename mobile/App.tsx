@@ -16,7 +16,11 @@ import { InicioScreen } from './src/screens/InicioScreen';
 import { ServiciosScreen } from './src/screens/ServiciosScreen';
 import { SolidaridadScreen } from './src/screens/SolidaridadScreen';
 import { PerfilScreen } from './src/screens/PerfilScreen';
+import { AuthGuard } from './src/components/AuthGuard';
 
+  
+
+  
 const Tab = createBottomTabNavigator();
 
 function MainNavigator() {
@@ -111,9 +115,11 @@ export default function App() {
     <SafeAreaProvider>
       <AppProvider>
         <StatusBar style="dark" />
-        <NavigationContainer>
-          <MainNavigator />
-        </NavigationContainer>
+        <AuthGuard>
+          <NavigationContainer>
+            <MainNavigator />
+          </NavigationContainer>
+        </AuthGuard>
       </AppProvider>
     </SafeAreaProvider>
   );
