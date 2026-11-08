@@ -67,10 +67,14 @@ export const ServiciosScreen = () => {
           setProviders((prev) => {
             const rawList = [...localSaved, ...prev];
             const unique: ServiceProvider[] = [];
-            const seen = new Set<string>();
+            const seenIds = new Set<string>();
+            const seenContent = new Set<string>();
             for (const item of rawList) {
-              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
-                seen.add(item.id);
+              if (!item || !item.id || deletedIds.has(item.id)) continue;
+              const contentKey = `${item.name.toLowerCase().trim()}_${item.role.toLowerCase().trim()}_${item.category}`;
+              if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                seenIds.add(item.id);
+                seenContent.add(contentKey);
                 unique.push(item);
               }
             }
@@ -139,13 +143,29 @@ export const ServiciosScreen = () => {
               };
             });
 
+          // Purgar prov- temporales locales si Supabase ya nos trajo la fila canónica sincronizada
+          for (const rem of remoteProviders) {
+            const dupLocal = localSaved.find(
+              (loc) => loc.id.startsWith('prov-') && loc.name === rem.name && loc.role === rem.role
+            );
+            if (dupLocal) {
+              deleteServiceFromSQLite(dupLocal.id);
+              localSaved = localSaved.filter((l) => l.id !== dupLocal.id);
+            }
+          }
+
           setProviders((prev) => {
             const rawList = [...remoteProviders, ...localSaved, ...prev, ...MOCK_PROVIDERS];
             const unique: ServiceProvider[] = [];
-            const seen = new Set<string>();
+            const seenIds = new Set<string>();
+            const seenContent = new Set<string>();
+
             for (const item of rawList) {
-              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
-                seen.add(item.id);
+              if (!item || !item.id || deletedIds.has(item.id)) continue;
+              const contentKey = `${item.name.toLowerCase().trim()}_${item.role.toLowerCase().trim()}_${item.category}`;
+              if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                seenIds.add(item.id);
+                seenContent.add(contentKey);
                 unique.push(item);
               }
             }
@@ -176,6 +196,7 @@ export const ServiciosScreen = () => {
 
   // Modal Registrar Servicio
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newTarifa, setNewTarifa] = useState('');
   const [newTipo, setNewTipo] = useState<'oficio' | 'profesion'>('oficio');
@@ -213,12 +234,16 @@ export const ServiciosScreen = () => {
         return b.recommendationsCount - a.recommendationsCount;
       });
 
-    // Filtro de unicidad estricta para garantizar que ningún ID se repita en React
+    // Filtro de unicidad estricta por ID y por Contenido (nombre + rol + categoría)
     const unique: ServiceProvider[] = [];
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenContent = new Set<string>();
     for (const item of sorted) {
-      if (item && item.id && !seen.has(item.id)) {
-        seen.add(item.id);
+      if (!item || !item.id) continue;
+      const contentKey = `${item.name.toLowerCase().trim()}_${item.role.toLowerCase().trim()}_${item.category}`;
+      if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+        seenIds.add(item.id);
+        seenContent.add(contentKey);
         unique.push(item);
       }
     }
@@ -321,6 +346,8 @@ export const ServiciosScreen = () => {
   };
 
   const handleCreateService = () => {
+    if (isSubmitting) return;
+
     const tarifaNum = parseFloat(newTarifa) || 0;
     if (tarifaNum > 100) {
       showToast('⚠️ La tarifa propuesta supera el límite vecinal de S/. 100');
@@ -334,6 +361,8 @@ export const ServiciosScreen = () => {
       showToast('Para una Profesión acreditada debes indicar tu N° de Colegiatura');
       return;
     }
+
+    setIsSubmitting(true);
 
     // Agregamos el servicio al directorio con los datos y el PIN real del usuario logueado
     const nuevoServicio: ServiceProvider = {
@@ -358,7 +387,14 @@ export const ServiciosScreen = () => {
       tarifa: tarifaNum,
     };
 
-    setProviders((prev) => [nuevoServicio, ...prev.filter((p) => p.id !== nuevoServicio.id)]);
+    setProviders((prev) => [
+      nuevoServicio,
+      ...prev.filter(
+        (p) =>
+          p.id !== nuevoServicio.id &&
+          !(p.name === nuevoServicio.name && p.role === nuevoServicio.role && p.category === nuevoServicio.category)
+      ),
+    ]);
     showToast(`✓ Servicio publicado con tu PIN ${nuevoServicio.servicePin}`);
     setIsCreateModalOpen(false);
     setNewTitle('');
@@ -392,27 +428,43 @@ export const ServiciosScreen = () => {
           );
 
           // Insertar en oficios_locales con coordenadas en formato Point estándar
-          const { error } = await supabase.from('oficios_locales').insert({
-            vecino_id: currentUser.id,
-            categoria: nuevoServicio.category,
-            tipo_actividad: nuevoServicio.tipoActividad,
-            rol_oficio: nuevoServicio.role,
-            experiencia: nuevoServicio.experience,
-            colegiatura: nuevoServicio.colegiatura || null,
-            verificado: nuevoServicio.verified,
-            descripcion: nuevoServicio.specialtyDetails,
-            recomendaciones: nuevoServicio.recommendationsCount,
-            service_pin: nuevoServicio.servicePin,
-            ubicacion: 'POINT(-77.0754 -11.8675)',
-          });
+          const { data, error } = await supabase
+            .from('oficios_locales')
+            .insert({
+              vecino_id: currentUser.id,
+              categoria: nuevoServicio.category,
+              tipo_actividad: nuevoServicio.tipoActividad,
+              rol_oficio: nuevoServicio.role,
+              experiencia: nuevoServicio.experience,
+              colegiatura: nuevoServicio.colegiatura || null,
+              verificado: nuevoServicio.verified,
+              descripcion: nuevoServicio.specialtyDetails,
+              recomendaciones: nuevoServicio.recommendationsCount,
+              service_pin: nuevoServicio.servicePin,
+              ubicacion: 'POINT(-77.0754 -11.8675)',
+            })
+            .select()
+            .maybeSingle();
+
+          if (!error && data) {
+            // Eliminar el prov- temporal de SQLite y reemplazar por la fila canónica con UUID de Supabase
+            await deleteServiceFromSQLite(nuevoServicio.id);
+            const canonicalService = { ...nuevoServicio, id: data.id };
+            await saveLocalServiceToSQLite(canonicalService);
+            setProviders((prev) => prev.map((p) => (p.id === nuevoServicio.id ? canonicalService : p)));
+          }
 
           if (error) {
             console.warn('Aviso al guardar en Supabase oficios_locales:', error.message);
           }
         } catch (err) {
           console.warn('Error al guardar oficio en Supabase:', err);
+        } finally {
+          setIsSubmitting(false);
         }
       })();
+    } else {
+      setIsSubmitting(false);
     }
   };
 
@@ -996,8 +1048,15 @@ export const ServiciosScreen = () => {
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.createServiceButton} onPress={handleCreateService} activeOpacity={0.85}>
-                <Text style={styles.createServiceButtonText}>Publicar para Revisión</Text>
+              <TouchableOpacity
+                style={[styles.createServiceButton, isSubmitting && { opacity: 0.6 }]}
+                onPress={handleCreateService}
+                disabled={isSubmitting}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.createServiceButtonText}>
+                  {isSubmitting ? 'Publicando...' : 'Publicar para Revisión'}
+                </Text>
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>

@@ -67,10 +67,14 @@ export const SolidaridadScreen = () => {
           setFavores((prev) => {
             const rawList = [...localSaved, ...prev];
             const unique: SolidaridadFavor[] = [];
-            const seen = new Set<string>();
+            const seenIds = new Set<string>();
+            const seenContent = new Set<string>();
             for (const item of rawList) {
-              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
-                seen.add(item.id);
+              if (!item || !item.id || deletedIds.has(item.id)) continue;
+              const contentKey = `${(item.ownerName || '').toLowerCase().trim()}_${(item.title || '').toLowerCase().trim()}_${item.categoria || item.type}`;
+              if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                seenIds.add(item.id);
+                seenContent.add(contentKey);
                 unique.push(item);
               }
             }
@@ -148,13 +152,38 @@ export const SolidaridadScreen = () => {
               };
             });
 
+          // Purgar fav- temporales locales si Supabase ya nos trajo la fila canónica sincronizada
+          for (const rem of remoteFavores) {
+            const matchingLocals = localSaved.filter(
+              (loc) =>
+                loc.id.startsWith('fav-') &&
+                loc.ownerName.toLowerCase().trim() === rem.ownerName.toLowerCase().trim() &&
+                loc.title.toLowerCase().trim() === rem.title.toLowerCase().trim()
+            );
+            for (const dup of matchingLocals) {
+              deleteFavorFromSQLite(dup.id);
+            }
+            localSaved = localSaved.filter(
+              (loc) =>
+                !(
+                  loc.id.startsWith('fav-') &&
+                  loc.ownerName.toLowerCase().trim() === rem.ownerName.toLowerCase().trim() &&
+                  loc.title.toLowerCase().trim() === rem.title.toLowerCase().trim()
+                )
+            );
+          }
+
           setFavores((prev) => {
             const rawList = [...remoteFavores, ...localSaved, ...prev, ...MOCK_FAVORES];
             const unique: SolidaridadFavor[] = [];
-            const seen = new Set<string>();
+            const seenIds = new Set<string>();
+            const seenContent = new Set<string>();
             for (const item of rawList) {
-              if (item && item.id && !seen.has(item.id) && !deletedIds.has(item.id)) {
-                seen.add(item.id);
+              if (!item || !item.id || deletedIds.has(item.id)) continue;
+              const contentKey = `${(item.ownerName || '').toLowerCase().trim()}_${(item.title || '').toLowerCase().trim()}_${item.categoria || item.type}`;
+              if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                seenIds.add(item.id);
+                seenContent.add(contentKey);
                 unique.push(item);
               }
             }
@@ -177,6 +206,7 @@ export const SolidaridadScreen = () => {
 
   // Modal Crear Favor
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState<SolidaridadCategory>('prestamo');
@@ -209,12 +239,16 @@ export const SolidaridadScreen = () => {
       return matchesCat && matchesQ;
     });
 
-    // Filtro de unicidad estricta para garantizar que ningún ID se repita en React
+    // Filtro de unicidad estricta para garantizar que ningún ID ni contenido se repita en React
     const unique: SolidaridadFavor[] = [];
-    const seen = new Set<string>();
+    const seenIds = new Set<string>();
+    const seenContent = new Set<string>();
     for (const item of list) {
-      if (item && item.id && !seen.has(item.id)) {
-        seen.add(item.id);
+      if (!item || !item.id) continue;
+      const contentKey = `${(item.ownerName || '').toLowerCase().trim()}_${(item.title || '').toLowerCase().trim()}_${item.categoria || item.type}`;
+      if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+        seenIds.add(item.id);
+        seenContent.add(contentKey);
         unique.push(item);
       }
     }
@@ -267,10 +301,14 @@ export const SolidaridadScreen = () => {
   };
 
   const handleCreateFavor = () => {
+    if (isSubmitting) return;
+
     if (!newTitle.trim()) {
       showToast('Ingresa un título para el favor o artículo');
       return;
     }
+
+    setIsSubmitting(true);
 
     const categoryLabels: Record<SolidaridadCategory, string> = {
       prestamo: 'Préstamo',
@@ -301,7 +339,18 @@ export const SolidaridadScreen = () => {
       donorBadgeLevel: dynamicBadgeLevel,
     };
 
-    setFavores((prev) => [newFav, ...prev.filter((f) => f.id !== newFav.id)]);
+    setFavores((prev) => [
+      newFav,
+      ...prev.filter(
+        (f) =>
+          f.id !== newFav.id &&
+          !(
+            f.ownerName === newFav.ownerName &&
+            f.title === newFav.title &&
+            (f.categoria || f.type) === (newFav.categoria || newFav.type)
+          )
+      ),
+    ]);
     addFavorCompleted();
     showToast('¡Publicación agregada al Muro Solidario (+1 favor a tu estatus)!');
     setIsCreateModalOpen(false);
@@ -333,22 +382,39 @@ export const SolidaridadScreen = () => {
             { onConflict: 'id' }
           );
 
-          const { error } = await supabase.from('muro_solidario').insert({
-            vecino_id: currentUser.id,
-            tipo_solicitud: newCategory,
-            titulo: newFav.title,
-            descripcion: newFav.description,
-            direccion_referencia: newFav.location,
-            estado: 'disponible',
-            ubicacion: 'POINT(-77.0754 -11.8675)',
-          });
+          const { data, error } = await supabase
+            .from('muro_solidario')
+            .insert({
+              vecino_id: currentUser.id,
+              tipo_solicitud: newCategory,
+              titulo: newFav.title,
+              descripcion: newFav.description,
+              direccion_referencia: newFav.location,
+              estado: 'disponible',
+              ubicacion: 'POINT(-77.0754 -11.8675)',
+            })
+            .select()
+            .maybeSingle();
+
+          if (!error && data) {
+            // Eliminar el fav- temporal de SQLite y reemplazar por la fila canónica con UUID de Supabase
+            await deleteFavorFromSQLite(newFav.id);
+            const canonicalFavor = { ...newFav, id: data.id };
+            await saveLocalFavorToSQLite(canonicalFavor);
+            setFavores((prev) => prev.map((f) => (f.id === newFav.id ? canonicalFavor : f)));
+          }
+
           if (error) {
             console.warn('Aviso: favor guardado localmente, error en nube:', error.message);
           }
         } catch (err) {
           console.warn('Error al guardar favor en Supabase:', err);
+        } finally {
+          setIsSubmitting(false);
         }
       })();
+    } else {
+      setIsSubmitting(false);
     }
   };
 
@@ -761,8 +827,15 @@ export const SolidaridadScreen = () => {
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.createFavorButton} onPress={handleCreateFavor} activeOpacity={0.85}>
-                <Text style={styles.createFavorButtonText}>Publicar en Muro Solidario</Text>
+              <TouchableOpacity
+                style={[styles.createFavorButton, isSubmitting && { opacity: 0.6 }]}
+                onPress={handleCreateFavor}
+                disabled={isSubmitting}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.createFavorButtonText}>
+                  {isSubmitting ? 'Publicando...' : 'Publicar en Muro Solidario'}
+                </Text>
               </TouchableOpacity>
               <View style={{ height: 20 }} />
             </ScrollView>
