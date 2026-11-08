@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Modal } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
+import { useApp } from '../context/AppContext';
 
 export const PerfilScreen = () => {
   const { currentUser, logout } = useAuth();
-  const [showGuideModal, setShowGuideModal] = useState(false);
+  const { openTutorial, isNetworkOnline, toggleNetworkOnline } = useApp();
 
   const vistosBuenos = currentUser.vistosBuenos ?? 0;
   const favoresCount = currentUser.favoresCount ?? 1;
@@ -171,9 +172,41 @@ export const PerfilScreen = () => {
      marginTop: 14,
      overflow: 'hidden',
    }}>
-     {/* 1. ¿Cómo funciona la app? */}
+     {/* Estado de Sincronización y Red */}
      <TouchableOpacity
-       onPress={() => setShowGuideModal(true)}
+       onPress={toggleNetworkOnline}
+       activeOpacity={0.8}
+       style={{
+         flexDirection: 'row',
+         alignItems: 'center',
+         justifyContent: 'space-between',
+         padding: 14,
+         backgroundColor: isNetworkOnline ? '#f0fdf4' : '#fff7ed',
+         borderBottomWidth: 1,
+         borderBottomColor: '#e2e8f0',
+       }}
+     >
+       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+         <Ionicons
+           name={isNetworkOnline ? 'cloud-done' : 'cloud-offline'}
+           size={20}
+           color={isNetworkOnline ? '#16a34a' : '#ea580c'}
+         />
+         <View>
+           <Text style={{ fontSize: 13, fontWeight: '800', color: isNetworkOnline ? '#166534' : '#9a3412' }}>
+             {isNetworkOnline ? 'Modo En Línea (Supabase Activo)' : 'Modo Offline (SQLite Activo)'}
+           </Text>
+           <Text style={{ fontSize: 11, color: '#64748b' }}>
+             {isNetworkOnline ? 'Toca para simular modo sin internet' : 'Toca para reconectar a la red'}
+           </Text>
+         </View>
+       </View>
+       <Ionicons name="swap-horizontal" size={18} color="#64748b" />
+     </TouchableOpacity>
+
+     {/* 1. ¿Cómo funciona la app? (Tutorial Interactivo) */}
+     <TouchableOpacity
+       onPress={openTutorial}
        activeOpacity={0.75}
        style={{
          flexDirection: 'row',
@@ -190,8 +223,8 @@ export const PerfilScreen = () => {
            <Ionicons name="help-circle" size={20} color="#1d4ed8" />
          </View>
          <View>
-           <Text style={{ fontSize: 13, fontWeight: '800', color: '#1e3a8a' }}>¿Cómo funciona la app?</Text>
-           <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '500' }}>Ver guía rápida de módulos y niveles</Text>
+           <Text style={{ fontSize: 13, fontWeight: '800', color: '#1e3a8a' }}>Tutorial: ¿Cómo funciona la app?</Text>
+           <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '500' }}>Ver guía interactiva en 3 pasos</Text>
          </View>
        </View>
        <Ionicons name="chevron-forward" size={18} color="#2563eb" />
@@ -214,27 +247,6 @@ export const PerfilScreen = () => {
        <Text style={{ fontSize: 13, fontWeight: '800', color: '#e11d48' }}>Cerrar sesión</Text>
      </TouchableOpacity>
    </View>
-
-   {/* Modal Guía de la App */}
-   <Modal visible={showGuideModal} transparent animationType="fade">
-     <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'center', padding: 20 }}>
-       <View style={{ backgroundColor: '#ffffff', borderRadius: 20, padding: 20, gap: 10 }}>
-         <Text style={{ fontSize: 16, fontWeight: '900', color: '#0f172a' }}>Guía Rápida • Comunidad Vecinos</Text>
-         <Text style={{ fontSize: 12, color: '#475569', lineHeight: 18 }}>
-           • <Text style={{ fontWeight: '800' }}>Inicio:</Text> Avisos oficiales, mantenimiento y Vecino del Mes.{'\n'}
-           • <Text style={{ fontWeight: '800' }}>Servicios:</Text> Oficios y profesiones locales validados con tu PIN de 4 dígitos.{'\n'}
-           • <Text style={{ fontWeight: '800' }}>Solidaridad:</Text> Préstamos, donaciones y apoyo vecinal para subir de Bronce a Héroe del Barrio.{'\n'}
-           • <Text style={{ fontWeight: '800' }}>Botón SOS:</Text> Alerta individual o Modo Crisis Comunitaria por radios.
-         </Text>
-         <TouchableOpacity
-           onPress={() => setShowGuideModal(false)}
-           style={{ backgroundColor: '#1d4ed8', paddingVertical: 11, borderRadius: 12, alignItems: 'center', marginTop: 6 }}
-         >
-           <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12 }}>¡Entendido!</Text>
-         </TouchableOpacity>
-       </View>
-     </View>
-   </Modal>
       {/* Margen final para no chocar con tab bar */}
       <View style={{ height: 40 }} />
     </ScrollView>

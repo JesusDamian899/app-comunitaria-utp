@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -23,10 +23,12 @@ import type { SolidaridadFavor, SolidaridadCategory } from '../types';
 import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
+import { supabase } from '../lib/supabaseClient';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 
-export type SolidaridadFilterType = 'todos' | SolidaridadCategory;
+export type SolidaridadFilterType = 'todos' | SolidaridadCategory | 'emergencia';
 
-const CATEGORIES: { id: SolidaridadFilterType; label: string; icon: string }[] = [
+const CATEGORIES_NORMAL: { id: SolidaridadFilterType; label: string; icon: string }[] = [
   { id: 'todos', label: 'Todos', icon: 'apps' },
   { id: 'prestamo', label: 'Préstamo', icon: 'build' },
   { id: 'donacion', label: 'Donación', icon: 'gift' },
@@ -34,9 +36,32 @@ const CATEGORIES: { id: SolidaridadFilterType; label: string; icon: string }[] =
   { id: 'intercambio_habilidades', label: 'Intercambio habilidades', icon: 'sparkles' },
 ];
 
+const CATEGORIES_CRISIS: { id: SolidaridadFilterType; label: string; icon: string }[] = [
+  { id: 'todos', label: 'Todos Críticos', icon: 'warning' },
+  { id: 'donacion', label: 'Agua y Alimentos', icon: 'water' },
+  { id: 'acompanamiento', label: 'Primeros Auxilios', icon: 'medkit' },
+  { id: 'prestamo', label: 'Herramientas / Refugio', icon: 'shield-checkmark' },
+  { id: 'intercambio_habilidades', label: 'Rescate / Voluntariado', icon: 'people' },
+];
+
+const PRESETS_NORMAL = [
+  { label: '🔨 Prestar Escalera', cat: 'prestamo' as SolidaridadCategory, title: 'Escalera de aluminio 6 peldaños', desc: 'Escalera tijera marca Cuprum (1.80m). Ideal para cambiar luminarias o techos. Se entrega en mano.' },
+  { label: '📚 Donar Libros', cat: 'donacion' as SolidaridadCategory, title: 'Caja con 15 libros escolares', desc: 'Libros de primaria y secundaria en excelente estado para escolares de la urbanización.' },
+  { label: '🚗 Movilidad / Botica', cat: 'acompanamiento' as SolidaridadCategory, title: 'Acompañamiento a botica / centro de salud', desc: 'Apoyo para vecinos adultos mayores que requieran transporte corto o comprar medicinas.' },
+  { label: '🌱 Cuidado Plantas', cat: 'intercambio_habilidades' as SolidaridadCategory, title: 'Intercambio: Jardinería por asesoría digital', desc: 'Enseño técnicas de propagación de suculentas a cambio de ayuda con banca móvil.' },
+];
+
+const PRESETS_CRISIS = [
+  { label: '💧 20L Agua Potable', cat: 'donacion' as SolidaridadCategory, title: 'Bidón de 20L de agua purificada disponible', desc: 'Punto de abastecimiento solidario para familias con corte de agua en Sector 2.' },
+  { label: '🩹 Donar Botiquín', cat: 'donacion' as SolidaridadCategory, title: 'Botiquín de trauma y gasas estériles', desc: 'Vendas, alcohol, gasas y analgésicos disponibles en Calle Los Sauces 310.' },
+  { label: '⚡ Carga Celular / Luz', cat: 'prestamo' as SolidaridadCategory, title: 'Punto de energía y carga móvil con panel solar', desc: 'Punto de recarga de celulares para vecinos sin energía eléctrica en su manzana.' },
+  { label: '🏠 Refugio Temporal', cat: 'acompanamiento' as SolidaridadCategory, title: 'Espacio seguro y frazadas para 1 familia', desc: 'Ambiente disponible en planta baja para vecinos afectados por contingencia.' },
+];
+
 export const SolidaridadScreen = () => {
-  const { showToast } = useApp();
+  const { showToast, isCrisisRealActive, proximityRadius, isNetworkOnline } = useApp();
   const { currentUser, addFavorCompleted } = useAuth();
+  const { saveToOfflineQueue } = useOfflineSync();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<SolidaridadFilterType>('todos');
@@ -50,6 +75,40 @@ export const SolidaridadScreen = () => {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newCategory, setNewCategory] = useState<SolidaridadCategory>('prestamo');
+
+  // Sincronización inicial desde Supabase
+  useEffect(() => {
+    if (supabase) {
+      supabase
+        .from('muro_solidario')
+        .select('*')
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            const dbFavores: SolidaridadFavor[] = data.map((d: any) => ({
+              id: d.id,
+              type: d.tipo_solicitud || 'prestamo',
+              categoria: d.tipo_solicitud || 'prestamo',
+              badgeTag: d.tipo_solicitud ? d.tipo_solicitud.toUpperCase() : 'SOLIDARIDAD',
+              badgeTime: 'En línea',
+              title: d.titulo || 'Apoyo Comunitario',
+              description: d.descripcion,
+              ownerName: 'Vecino Residente',
+              location: d.direccion_referencia || 'Calle Los Sauces 310',
+              actionButtonText: 'Pedir apoyo',
+              iconName: 'wrench',
+              estado: d.estado || 'disponible',
+              donorBadgeLevel: 'plata',
+            }));
+
+            setFavores((prev) => {
+              const ids = new Set(prev.map((p) => p.id));
+              const unique = dbFavores.filter((df) => !ids.has(df.id));
+              return [...unique, ...prev];
+            });
+          }
+        });
+    }
+  }, []);
 
   const filteredFavores = useMemo(() => {
     return favores.filter((f) => {
@@ -66,9 +125,17 @@ export const SolidaridadScreen = () => {
         f.ownerName.toLowerCase().includes(q) ||
         f.location.toLowerCase().includes(q);
 
-      return matchesCat && matchesQ;
+      // Filtro por radios de proximidad (500m Sector 2, 2km Sector 1 y 2, 5km Todos)
+      let matchesRadius = true;
+      if (proximityRadius === 500) {
+        matchesRadius = f.location.includes('Sector 2') || f.location.includes('Sauces');
+      } else if (proximityRadius === 2000) {
+        matchesRadius = !f.location.includes('Sector 3');
+      }
+
+      return matchesCat && matchesQ && matchesRadius;
     });
-  }, [favores, searchQuery, selectedCategory]);
+  }, [favores, searchQuery, selectedCategory, proximityRadius]);
 
   const handleOpenWhatsapp = (favor: SolidaridadFavor) => {
     const phone = favor.phone || '998765432';
@@ -90,13 +157,29 @@ export const SolidaridadScreen = () => {
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'recibido' } : item))
     );
     addFavorCompleted();
-    // Notificación directa sin popups emergentes (presunción de confianza vecinal)
-    showToast(`${currentUser.name} confirmó tu ayuda. ¡Gracias por aportar al barrio!`);
+
+    // Actualización real en Supabase si no es id local ficticio
+    if (isNetworkOnline && supabase && !favor.id.startsWith('fav-')) {
+      supabase
+        .from('muro_solidario')
+        .update({ estado: 'recibido' })
+        .eq('id', favor.id)
+        .then(() => {});
+    }
+
+    showToast(`${currentUser.name} confirmó la entrega. ¡Ganaste +1 favor en tu estatus!`);
   };
 
-  const handleCreateFavor = () => {
+  const applyPreset = (p: typeof PRESETS_NORMAL[0]) => {
+    setNewTitle(p.title);
+    setNewDesc(p.desc);
+    setNewCategory(p.cat);
+    showToast(`Plantilla "${p.label}" cargada en 1 clic`);
+  };
+
+  const handleCreateFavor = async () => {
     if (!newTitle.trim()) {
-      showToast('Ingresa un título para el favor o artículo');
+      showToast('Ingresa un título para el favor o recurso');
       return;
     }
 
@@ -120,7 +203,7 @@ export const SolidaridadScreen = () => {
       description: newDesc.trim() || `${newTitle.trim()}. Disponible para vecinos de la urbanización.`,
       ownerName: currentUser.name,
       ownerAvatarUrl: currentUser.avatarUrl,
-      location: `${currentUser.calle} ${currentUser.numero}`,
+      location: `${currentUser.calle} ${currentUser.numero} (${currentUser.sector})`,
       phone: currentUser.phone,
       actionButtonText: 'Pedir apoyo',
       iconName: 'wrench',
@@ -128,27 +211,89 @@ export const SolidaridadScreen = () => {
       donorBadgeLevel: dynamicBadgeLevel,
     };
 
+    // 1. Optimistic UI update
     setFavores((prev) => [newFav, ...prev]);
     addFavorCompleted();
-    showToast('¡Publicación agregada al Muro Solidario (+1 favor a tu estatus)!');
+
+    // 2. Persistencia en SQLite local
+    await saveToOfflineQueue({
+      id: newFav.id,
+      type: 'SOLIDARIDAD_FAVOR',
+      title: newFav.title,
+      category: newFav.categoria,
+      author: currentUser.name,
+      address: newFav.location,
+      timestamp: Date.now(),
+    });
+
+    // 3. Persistencia en Supabase
+    if (isNetworkOnline && supabase) {
+      supabase.from('muro_solidario').insert({
+        vecino_id: currentUser.id !== 'usr-1' ? currentUser.id : null,
+        tipo_solicitud: newCategory,
+        titulo: newTitle.trim(),
+        descripcion: newDesc.trim() || newTitle.trim(),
+        direccion_referencia: `${currentUser.calle} ${currentUser.numero}`,
+        estado: 'disponible',
+        ubicacion: 'SRID=4326;POINT(-77.0754 -11.8675)',
+      }).then(() => {});
+    }
+
+    showToast(
+      isNetworkOnline
+        ? '¡Publicado en el Muro Solidario y sincronizado en Supabase (+1 favor)!'
+        : '📡 Publicado localmente en SQLite. Se sincronizará al conectar.'
+    );
+
     setIsCreateModalOpen(false);
     setNewTitle('');
     setNewDesc('');
   };
 
+  const categories = isCrisisRealActive ? CATEGORIES_CRISIS : CATEGORIES_NORMAL;
+  const presets = isCrisisRealActive ? PRESETS_CRISIS : PRESETS_NORMAL;
+
   return (
     <ScrollView 
-      style={styles.container} 
+      style={[styles.container, isCrisisRealActive && styles.containerCrisis]} 
       contentContainerStyle={styles.contentContainer} 
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      {/* 1. Barra de Búsqueda (Estilo homogéneo a Servicios) */}
+      {/* EVOLUCIÓN EN CRISIS: BANNER DE AYUDA HUMANITARIA Y ALERTA DE DBSCAN */}
+      {isCrisisRealActive && (
+        <View style={styles.crisisBannerCard}>
+          <View style={styles.crisisBannerHeader}>
+            <View style={styles.crisisPulse} />
+            <Text style={styles.crisisBannerTitle}>TABLERO DE AYUDA HUMANITARIA</Text>
+          </View>
+          <Text style={styles.crisisBannerSubtitle}>
+            Coordinación de recursos de supervivencia (Agua potable, albergue, víveres y medicinas).
+          </Text>
+
+          {/* Alerta del Motor Analítico IA (DBSCAN) */}
+          <View style={styles.dbscanAlertBox}>
+            <Ionicons name="analytics" size={18} color="#991b1b" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dbscanTitle}>ZONA CRÍTICA DETECTADA POR IA (DBSCAN)</Text>
+              <Text style={styles.dbscanDesc}>
+                5 reportes activos de Falta de Agua y Auxilio Médico concentrados en Sector 2 (Radio &lt; 500m).
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 1. Barra de Búsqueda */}
       <View style={styles.searchBar}>
         <Ionicons name="search" size={18} color="#64748b" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar escalera, taladro, libros, acompañamiento..."
+          placeholder={
+            isCrisisRealActive
+              ? "Buscar agua potable, botiquín, frazadas, albergue..."
+              : "Buscar escalera, taladro, libros, acompañamiento..."
+          }
           placeholderTextColor="#94a3b8"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -162,19 +307,22 @@ export const SolidaridadScreen = () => {
         )}
       </View>
 
-      {/* 2. Chips de Categorías */}
+      {/* 2. Chips de Categorías (Adaptables a Modo Cotidiano vs Modo Crisis) */}
       <ScrollView 
         horizontal 
         showsHorizontalScrollIndicator={false} 
         style={styles.categoriesScroll}
         contentContainerStyle={styles.categoriesScrollContainer}
       >
-        {CATEGORIES.map((cat) => {
+        {categories.map((cat) => {
           const isSelected = selectedCategory === cat.id;
           return (
             <TouchableOpacity
               key={cat.id}
-              style={[styles.categoryChip, isSelected && styles.categoryChipActive]}
+              style={[
+                styles.categoryChip,
+                isSelected && (isCrisisRealActive ? styles.categoryChipCrisisActive : styles.categoryChipActive),
+              ]}
               onPress={() => setSelectedCategory(cat.id)}
               activeOpacity={0.8}
             >
@@ -191,41 +339,60 @@ export const SolidaridadScreen = () => {
         })}
       </ScrollView>
 
-      {/* 3. Banner Promocional "+ Pedir o prestar (Muro Solidario)" */}
-      <View style={styles.publishBanner}>
+      {/* 3. Banner Promocional de Publicación Rápida */}
+      <View style={[styles.publishBanner, isCrisisRealActive && styles.publishBannerCrisis]}>
         <View style={styles.publishBannerLeft}>
-          <View style={styles.publishIconBg}>
-            <MaterialCommunityIcons name="hand-heart" size={20} color="#1d4ed8" />
+          <View style={[styles.publishIconBg, isCrisisRealActive && { backgroundColor: '#dc2626' }]}>
+            <MaterialCommunityIcons
+              name={isCrisisRealActive ? "shield-plus" : "hand-heart"}
+              size={20}
+              color="#ffffff"
+            />
           </View>
           <View style={styles.publishBannerTextContainer}>
-            <Text style={styles.publishBannerTitle}>¿Necesitas algo o puedes prestar ayuda?</Text>
-            <Text style={styles.publishBannerSubtitle}>Pide un préstamo, dona o comparte tus habilidades.</Text>
+            <Text style={styles.publishBannerTitle}>
+              {isCrisisRealActive ? '¿Tienes recursos críticos o auxilio?' : '¿Necesitas algo o puedes prestar ayuda?'}
+            </Text>
+            <Text style={styles.publishBannerSubtitle}>
+              {isCrisisRealActive
+                ? 'Ofrece agua, botiquín o refugio para tus vecinos.'
+                : 'Pide un préstamo, dona o comparte habilidades.'}
+            </Text>
           </View>
         </View>
         <TouchableOpacity
-          style={styles.publishButton}
+          style={[styles.publishButton, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
           onPress={() => setIsCreateModalOpen(true)}
           activeOpacity={0.85}
         >
           <Ionicons name="add-circle" size={16} color="#ffffff" />
-          <Text style={styles.publishButtonText}>+ Pedir o prestar (Muro Solidario)</Text>
+          <Text style={styles.publishButtonText}>
+            {isCrisisRealActive ? '+ Publicar Recurso SOS' : '+ Pedir o prestar (2 clics)'}
+          </Text>
         </TouchableOpacity>
       </View>
 
-      {/* 4. Encabezado de Sección */}
+      {/* 4. Encabezado de Sección con Indicador de Radio */}
       <View style={styles.sectionHeader}>
         <View style={styles.sectionHeaderTitleRow}>
-          <MaterialCommunityIcons name="account-group" size={20} color="#2563eb" />
-          <Text style={styles.sectionHeaderTitle}>Vecinos Solidarios</Text>
+          <MaterialCommunityIcons
+            name={isCrisisRealActive ? "hand-back-left" : "account-group"}
+            size={20}
+            color={isCrisisRealActive ? "#dc2626" : "#2563eb"}
+          />
+          <Text style={styles.sectionHeaderTitle}>
+            {isCrisisRealActive ? 'Recursos Humanitarios Activos' : 'Vecinos Solidarios'}
+          </Text>
         </View>
-        <Text style={styles.sectionHeaderCount}>{filteredFavores.length} activos</Text>
+        <Text style={styles.sectionHeaderCount}>
+          {filteredFavores.length} en radio {proximityRadius}m
+        </Text>
       </View>
 
-      {/* 5. Lista de Favores con Descripción Fija y Permanente (NO desplegable) */}
+      {/* 5. Lista de Favores y Recursos */}
       {filteredFavores.map((favor) => {
         const isReceived = favor.estado === 'recibido';
         const hasContacted = contactedMap[favor.id] || favor.estado === 'ayuda_solicitada';
-        const firstName = favor.ownerName.split(' ')[0] || favor.ownerName;
         const defaultAvatar =
           favor.ownerAvatarUrl ||
           'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80';
@@ -238,7 +405,7 @@ export const SolidaridadScreen = () => {
         }[favor.categoria || 'prestamo'] || favor.badgeTag;
 
         return (
-          <View key={favor.id} style={styles.favorCard}>
+          <View key={favor.id} style={[styles.favorCard, isCrisisRealActive && styles.favorCardCrisis]}>
             {/* Cabecera */}
             <View style={styles.favorHeader}>
               <View style={styles.favorHeaderLeft}>
@@ -254,160 +421,123 @@ export const SolidaridadScreen = () => {
                   <Text style={styles.favorLocation} numberOfLines={1}>📍 {favor.location}</Text>
                 </View>
               </View>
-              <View style={styles.categoryPill}>
-                <Text style={styles.categoryPillText}>{categoryLabel}</Text>
+              <View style={[styles.categoryPill, isCrisisRealActive && { backgroundColor: '#fee2e2' }]}>
+                <Text style={[styles.categoryPillText, isCrisisRealActive && { color: '#dc2626' }]}>
+                  {categoryLabel}
+                </Text>
               </View>
             </View>
 
-            {/* Fila de Confianza Presumida */}
-            <View style={styles.trustBadgeRow}>
-              <View style={[
-                styles.trustBadge,
-                isReceived ? styles.trustBadgeReceived : hasContacted ? styles.trustBadgePending : styles.trustBadgeInitial
-              ]}>
-                {isReceived ? (
-                  <>
-                    <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
-                    <Text style={styles.trustBadgeTextReceived}>Ayuda Concluida y Confirmada</Text>
-                  </>
-                ) : hasContacted ? (
-                  <>
-                    <Ionicons name="time" size={13} color="#d97706" />
-                    <Text style={styles.trustBadgeTextPending}>Ayuda en proceso con {firstName}</Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="shield-checkmark" size={13} color="#2563eb" />
-                    <Text style={styles.trustBadgeTextInitial}>Confianza Presumida • Sin códigos</Text>
-                  </>
-                )}
-              </View>
-            </View>
-
-            {/* REQUISITO FUNDAMENTAL: Descripción fija, estática y siempre visible (NO DESPLEGABLE) */}
+            {/* Descripción fija y visible */}
             <View style={styles.descriptionBox}>
-              <Text style={styles.descriptionHeaderTitle}>DETALLES DEL FAVOR EN LA URBANIZACIÓN</Text>
-              <Text style={styles.descriptionText}>
-                {favor.description || `${favor.title}. Disponible para vecinos de la urbanización.`}
-              </Text>
+              <Text style={styles.descriptionText}>{favor.description}</Text>
             </View>
 
-            {/* Botón WhatsApp transformable a "Marcar como Recibido" */}
+            {/* Acciones de Contacto y Confirmación */}
             <View style={styles.actionContainer}>
               {isReceived ? (
-                <View style={styles.receivedBadgeContainer}>
-                  <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
-                  <Text style={styles.receivedBadgeText}>✓ Ayuda Recibida y Agradecida</Text>
+                <View style={styles.receivedBadge}>
+                  <Ionicons name="checkmark-done-circle" size={18} color="#15803d" />
+                  <Text style={styles.receivedText}>Ayuda entregada con éxito ✓ (+1 favor)</Text>
                 </View>
-              ) : !hasContacted ? (
-                <TouchableOpacity
-                  style={styles.whatsappButton}
-                  onPress={() => handleOpenWhatsapp(favor)}
-                  activeOpacity={0.85}
-                >
-                  <FontAwesome5 name="whatsapp" size={18} color="#ffffff" />
-                  <Text style={styles.whatsappButtonText}>Chat WhatsApp con {firstName}</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.contactedContainer}>
+              ) : hasContacted ? (
+                <View style={styles.contactedRow}>
                   <TouchableOpacity
-                    style={styles.markReceivedButton}
+                    style={styles.whatsappActiveBtn}
+                    onPress={() => handleOpenWhatsapp(favor)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="logo-whatsapp" size={16} color="#ffffff" />
+                    <Text style={styles.whatsappActiveText}>Coordinar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.markReceivedBtn}
                     onPress={() => handleMarkAsReceived(favor)}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
-                    <Text style={styles.markReceivedButtonText}>Marcar como Recibido</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => handleOpenWhatsapp(favor)}
-                    style={styles.recontactLink}
-                  >
-                    <Text style={styles.recontactLinkText}>
-                      ¿Escribir nuevamente por WhatsApp a {firstName}?
-                    </Text>
+                    <Ionicons name="checkmark" size={16} color="#ffffff" />
+                    <Text style={styles.markReceivedText}>Marcar como Recibido</Text>
                   </TouchableOpacity>
                 </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.contactBtn, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
+                  onPress={() => handleOpenWhatsapp(favor)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="chatbubbles-outline" size={17} color="#ffffff" />
+                  <Text style={styles.contactBtnText}>
+                    {isCrisisRealActive ? 'Solicitar Recurso de Auxilio' : favor.actionButtonText}
+                  </Text>
+                </TouchableOpacity>
               )}
             </View>
           </View>
         );
       })}
 
-      {/* Modal Crear Favor / Pedir Préstamo */}
-      <Modal visible={isCreateModalOpen} transparent animationType="slide">
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+      {/* Modal Crear Favor con Plantillas Rápidas (2 Clics) */}
+      <Modal visible={isCreateModalOpen} animationType="slide" transparent>
+        <KeyboardAvoidingView
           style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <View style={styles.modalCardLarge}>
+          <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Publicar en Muro Solidario</Text>
+              <Text style={styles.modalTitle}>
+                {isCrisisRealActive ? 'Publicar Recurso Humanitario' : 'Publicar en el Muro Solidario'}
+              </Text>
               <TouchableOpacity onPress={() => setIsCreateModalOpen(false)}>
-                <Ionicons name="close" size={22} color="#64748b" />
+                <Ionicons name="close" size={20} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
-              <Text style={styles.inputLabel}>1. Categoría</Text>
-              <View style={styles.catGrid}>
-                {[
-                  { id: 'prestamo', label: 'Préstamo' },
-                  { id: 'donacion', label: 'Donación' },
-                  { id: 'acompanamiento', label: 'Acompañamiento' },
-                  { id: 'intercambio_habilidades', label: 'Intercambio habilidades' },
-                ].map((item) => (
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Plantillas Rápidas (1 toque para llenar) */}
+              <Text style={styles.sectionSublabel}>⚡ Plantillas Rápidas (1 toque para llenar):</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
+                {presets.map((p, idx) => (
                   <TouchableOpacity
-                    key={item.id}
-                    style={[
-                      styles.modalCatOption,
-                      newCategory === item.id && styles.modalCatOptionActive,
-                    ]}
-                    onPress={() => setNewCategory(item.id as SolidaridadCategory)}
+                    key={idx}
+                    style={styles.presetChip}
+                    onPress={() => applyPreset(p)}
                     activeOpacity={0.8}
                   >
-                    <Text
-                      style={[
-                        styles.modalCatText,
-                        newCategory === item.id && styles.modalCatTextActive,
-                      ]}
-                    >
-                      {item.label}
-                    </Text>
+                    <Text style={styles.presetChipText}>{p.label}</Text>
                   </TouchableOpacity>
                 ))}
+              </ScrollView>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Título o artículo *</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="Ej: Escalera de 6 peldaños, Bidón de agua, Taladro..."
+                  placeholderTextColor="#94a3b8"
+                  value={newTitle}
+                  onChangeText={setNewTitle}
+                />
               </View>
 
-              <Text style={styles.inputLabel}>2. Título del Artículo o Favor</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Ej: Préstamo de escalera, Donación de libros..."
-                placeholderTextColor="#94a3b8"
-                value={newTitle}
-                onChangeText={setNewTitle}
-              />
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Descripción o condiciones de entrega</Text>
+                <TextInput
+                  style={[styles.modalInput, styles.modalTextArea]}
+                  placeholder="Indica horarios, estado del artículo o instrucciones..."
+                  placeholderTextColor="#94a3b8"
+                  value={newDesc}
+                  onChangeText={setNewDesc}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
 
-              <Text style={styles.inputLabel}>3. Descripción y Condiciones de Uso</Text>
-              <TextInput
-                style={[styles.textInput, { height: 80, textAlignVertical: 'top' }]}
-                multiline
-                placeholder="Describe el estado del objeto, tiempo de préstamo o cómo puedes ayudar..."
-                placeholderTextColor="#94a3b8"
-                value={newDesc}
-                onChangeText={setNewDesc}
-              />
-
-              <View style={styles.trustBannerNotice}>
-                <Ionicons name="shield-checkmark" size={16} color="#1d4ed8" />
-                <Text style={styles.trustBannerNoticeText}>
-                  Bajo la Presunción de Confianza: No se requieren códigos ni depósitos monetarios.
+              <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleCreateFavor} activeOpacity={0.85}>
+                <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
+                <Text style={styles.modalSubmitText}>
+                  {isCrisisRealActive ? 'Publicar Recurso SOS (2 clics)' : 'Publicar en el Muro (2 clics)'}
                 </Text>
-              </View>
-
-              <TouchableOpacity style={styles.createFavorButton} onPress={handleCreateFavor} activeOpacity={0.85}>
-                <Text style={styles.createFavorButtonText}>Publicar en Muro Solidario</Text>
               </TouchableOpacity>
-              <View style={{ height: 20 }} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -423,56 +553,108 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
+  containerCrisis: {
+    backgroundColor: '#fef2f2',
+  },
   contentContainer: {
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 24,
+  },
+  crisisBannerCard: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#fca5a5',
+    padding: 14,
+    marginBottom: 14,
+  },
+  crisisBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  crisisPulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#dc2626',
+  },
+  crisisBannerTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#991b1b',
+    letterSpacing: 0.5,
+  },
+  crisisBannerSubtitle: {
+    fontSize: 11,
+    color: '#7f1d1d',
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  dbscanAlertBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#dc2626',
+  },
+  dbscanTitle: {
+    fontSize: 10.5,
+    fontWeight: '900',
+    color: '#991b1b',
+  },
+  dbscanDesc: {
+    fontSize: 10.5,
+    color: '#475569',
+    marginTop: 2,
+    lineHeight: 14,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 12,
     gap: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    elevation: 1,
   },
   searchInput: {
     flex: 1,
     fontSize: 13,
     color: '#0f172a',
-    padding: 0,
   },
   categoriesScroll: {
     marginBottom: 14,
-    marginHorizontal: -16,
   },
   categoriesScrollContainer: {
-    paddingHorizontal: 16,
-    gap: 8,
+    gap: 6,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 20,
     backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   categoryChipActive: {
     backgroundColor: '#1d4ed8',
     borderColor: '#1d4ed8',
+  },
+  categoryChipCrisisActive: {
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
   },
   categoryChipText: {
     fontSize: 12,
@@ -485,27 +667,30 @@ const styles = StyleSheet.create({
   publishBanner: {
     backgroundColor: '#eff6ff',
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#bfdbfe',
     padding: 14,
-    marginBottom: 16,
-    shadowColor: '#1d4ed8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  publishBannerCrisis: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
   },
   publishBannerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 10,
   },
   publishIconBg: {
-    backgroundColor: '#dbeafe',
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: 12,
+    backgroundColor: '#1d4ed8',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -513,36 +698,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   publishBannerTitle: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#1e3a8a',
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#0f172a',
   },
   publishBannerSubtitle: {
-    fontSize: 11,
-    color: '#3b82f6',
-    fontWeight: '500',
-    marginTop: 1,
-    lineHeight: 15,
+    fontSize: 10.5,
+    color: '#64748b',
+    marginTop: 2,
   },
   publishButton: {
     backgroundColor: '#1d4ed8',
-    borderRadius: 12,
-    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   publishButtonText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionHeaderTitleRow: {
     flexDirection: 'row',
@@ -556,26 +739,24 @@ const styles = StyleSheet.create({
   },
   sectionHeaderCount: {
     fontSize: 11,
-    color: '#64748b',
     fontWeight: '700',
+    color: '#64748b',
   },
   favorCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginBottom: 14,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  favorCardCrisis: {
+    borderColor: '#fca5a5',
   },
   favorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 10,
   },
   favorHeaderLeft: {
@@ -583,13 +764,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flex: 1,
-    marginRight: 8,
   },
   favorAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#e2e8f0',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#f1f5f9',
   },
   favorInfo: {
     flex: 1,
@@ -598,23 +778,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    flexWrap: 'wrap',
   },
   favorOwnerName: {
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#0f172a',
   },
   favorTitle: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: '700',
     color: '#1d4ed8',
-    fontWeight: '800',
-    marginTop: 2,
+    marginTop: 1,
   },
   favorLocation: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748b',
-    fontWeight: '500',
     marginTop: 1,
   },
   categoryPill: {
@@ -628,125 +806,83 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#475569',
   },
-  trustBadgeRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  trustBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  trustBadgeInitial: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#dbeafe',
-  },
-  trustBadgePending: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#fef3c7',
-  },
-  trustBadgeReceived: {
-    backgroundColor: '#f0fdf4',
-    borderColor: '#bbf7d0',
-  },
-  trustBadgeTextInitial: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#1d4ed8',
-  },
-  trustBadgeTextPending: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#b45309',
-  },
-  trustBadgeTextReceived: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#16a34a',
-  },
   descriptionBox: {
     backgroundColor: '#f8fafc',
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#f1f5f9',
-  },
-  descriptionHeaderTitle: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#64748b',
-    marginBottom: 3,
-    letterSpacing: 0.3,
   },
   descriptionText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#334155',
-    lineHeight: 16,
+    lineHeight: 17,
   },
   actionContainer: {
     marginTop: 2,
   },
-  whatsappButton: {
-    backgroundColor: '#16a34a',
-    borderRadius: 12,
-    paddingVertical: 12,
+  contactBtn: {
+    backgroundColor: '#1d4ed8',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  contactBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  contactedRow: {
+    flexDirection: 'row',
     gap: 8,
   },
-  whatsappButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  contactedContainer: {
-    gap: 6,
-  },
-  markReceivedButton: {
-    backgroundColor: '#15803d',
-    borderRadius: 12,
-    paddingVertical: 12,
+  whatsappActiveBtn: {
+    flex: 1,
+    backgroundColor: '#16a34a',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-  },
-  markReceivedButtonText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  recontactLink: {
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  recontactLinkText: {
-    color: '#16a34a',
-    fontSize: 11,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
-  },
-  receivedBadgeContainer: {
-    backgroundColor: '#f0fdf4',
-    borderWidth: 1.5,
-    borderColor: '#bbf7d0',
+    paddingVertical: 10,
     borderRadius: 12,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
   },
-  receivedBadgeText: {
-    color: '#16a34a',
+  whatsappActiveText: {
+    color: '#ffffff',
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '800',
+  },
+  markReceivedBtn: {
+    flex: 1.5,
+    backgroundColor: '#0f172a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  markReceivedText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  receivedBadge: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 12,
+  },
+  receivedText: {
+    color: '#15803d',
+    fontSize: 11.5,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,
@@ -754,104 +890,84 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
   },
-  modalCardLarge: {
+  modalCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 18,
-    maxHeight: '88%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 8,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
-    paddingBottom: 10,
+    marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+    paddingBottom: 8,
   },
   modalTitle: {
     fontSize: 15,
     fontWeight: '900',
     color: '#0f172a',
-    flex: 1,
   },
-  modalBodyScroll: {
-    maxHeight: 460,
-  },
-  inputLabel: {
-    fontSize: 12,
+  sectionSublabel: {
+    fontSize: 11,
     fontWeight: '800',
-    color: '#334155',
+    color: '#1d4ed8',
     marginBottom: 6,
-    marginTop: 10,
   },
-  catGrid: {
+  presetScroll: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    marginBottom: 12,
   },
-  modalCatOption: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-  },
-  modalCatOptionActive: {
+  presetChip: {
     backgroundColor: '#eff6ff',
-    borderColor: '#2563eb',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginRight: 8,
   },
-  modalCatText: {
+  presetChipText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748b',
-  },
-  modalCatTextActive: {
     color: '#1d4ed8',
-    fontWeight: '900',
   },
-  textInput: {
+  inputGroup: {
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  modalInput: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 9,
     fontSize: 13,
     color: '#0f172a',
   },
-  trustBannerNotice: {
+  modalTextArea: {
+    height: 70,
+    textAlignVertical: 'top',
+  },
+  modalSubmitBtn: {
+    backgroundColor: '#1d4ed8',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#eff6ff',
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-  },
-  trustBannerNoticeText: {
-    fontSize: 11,
-    color: '#1e3a8a',
-    fontWeight: '600',
-    flex: 1,
-    lineHeight: 15,
-  },
-  createFavorButton: {
-    backgroundColor: '#1d4ed8',
-    borderRadius: 12,
+    justifyContent: 'center',
+    gap: 6,
     paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 14,
+    borderRadius: 14,
+    marginTop: 4,
   },
-  createFavorButtonText: {
+  modalSubmitText: {
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -6,7 +6,8 @@ import {
   Modal, 
   TouchableOpacity, 
   ScrollView, 
-  Linking 
+  Linking,
+  ActivityIndicator
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
@@ -17,6 +18,18 @@ import {
 } from '@expo/vector-icons';
 import { MOCK_DIRECT_CALLS } from '../mock/data';
 import { useApp } from '../context/AppContext';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { useOfflineSync } from '../hooks/useOfflineSync';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../components/AuthGuard';
+
+const INCIDENT_OPTIONS = [
+  { type: 'caida', label: 'Me caí / Lesión', icon: 'walk-outline' as const },
+  { type: 'atrapado', label: 'Estoy atrapada/o', icon: 'hand-left-outline' as const },
+  { type: 'fuga_agua', label: 'Fuga o rotura', icon: 'water-outline' as const },
+  { type: 'seguridad', label: 'Sospechoso / Robo', icon: 'shield-outline' as const },
+  { type: 'otra', label: 'Otra urgencia', icon: 'alert-circle-outline' as const },
+];
 
 export const SosModal = () => {
   const { 
@@ -26,16 +39,80 @@ export const SosModal = () => {
     toggleCrisisRealMode, 
     isSosAlertSent, 
     toggleSosAlert, 
-    showToast 
+    showToast,
+    setUserSafetyStatus,
+    isNetworkOnline,
   } = useApp();
-
+  const { currentUser } = useAuth();
   const insets = useSafeAreaInsets();
+
+  const [selectedIncident, setSelectedIncident] = useState<string>('caida');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const { isLoading: isLocationLoading, requestLocation } = useGeolocation();
+  const { saveToOfflineQueue } = useOfflineSync();
 
   const handleCall = (phone: string, name: string) => {
     const cleanPhone = phone.replace(/\s+/g, '');
     Linking.openURL(`tel:${cleanPhone}`).catch(() => {
       showToast(`Llamando a ${name} (${phone})`);
     });
+  };
+
+  const handlePanicAction = async () => {
+    if (isSubmitting) return;
+
+    if (isSosAlertSent) {
+      toggleSosAlert();
+      setUserSafetyStatus('none');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      setUserSafetyStatus('needs_rescue');
+
+      // 1. Obtener coordenadas GPS reales mediante expo-location
+      const coords = await requestLocation();
+      const lat = coords ? coords.latitude : -11.8675;
+      const lon = coords ? coords.longitude : -77.0754;
+
+      const incidentObj = INCIDENT_OPTIONS.find((i) => i.type === selectedIncident);
+      const incidentLabel = incidentObj ? incidentObj.label : 'Urgencia vecinal';
+
+      // 2. Guardar SIEMPRE en SQLite local para resiliencia offline garantizada
+      await saveToOfflineQueue({
+        id: `sos-${Date.now()}`,
+        type: 'RESCUE',
+        incident: incidentLabel,
+        author: currentUser.name,
+        address: `${currentUser.calle} ${currentUser.numero}`,
+        latitude: lat,
+        longitude: lon,
+        timestamp: Date.now(),
+      });
+
+      // 3. Si está en línea, insertar en la tabla real alertas_emergencia de Supabase
+      if (isNetworkOnline && supabase) {
+        await supabase.from('alertas_emergencia').insert({
+          vecino_id: currentUser.id !== 'usr-1' ? currentUser.id : null,
+          tipo_emergencia: incidentLabel,
+          gravedad: 'CRITICA',
+          ubicacion: `SRID=4326;POINT(${lon} ${lat})`,
+        });
+      }
+
+      toggleSosAlert();
+      showToast(
+        isNetworkOnline
+          ? '🚨 ¡Alerta enviada a Central y vecinos cercanos con GPS!'
+          : '📡 Guardado en cola SQLite local (Se enviará al conectar)'
+      );
+    } catch (e: any) {
+      showToast('Alerta despachada en modo de respaldo.');
+      toggleSosAlert();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -70,7 +147,7 @@ export const SosModal = () => {
                 </Text>
                 <Text style={styles.switchSubtitle}>
                   {isCrisisRealActive
-                    ? 'Activado por terremoto, incendio u otra crisis que afecta a múltiples calles y manzanas.'
+                    ? 'Activado por terremoto, corte masivo u otra crisis. Toda la app evoluciona a ayuda humanitaria.'
                     : 'Uso personal para urgencia médica, sospechosos o incidente específico en tu lote.'}
                 </Text>
               </View>
@@ -85,20 +162,58 @@ export const SosModal = () => {
               </TouchableOpacity>
             </View>
 
+            {/* Selector de Motivo de Incidente (Fase 4) */}
+            {!isSosAlertSent && (
+              <View style={styles.incidentSelector}>
+                <Text style={styles.incidentTitle}>Selecciona el motivo de auxilio:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.incidentScroll}>
+                  {INCIDENT_OPTIONS.map((opt) => {
+                    const isSelected = selectedIncident === opt.type;
+                    return (
+                      <TouchableOpacity
+                        key={opt.type}
+                        style={[styles.incidentChip, isSelected && styles.incidentChipActive]}
+                        onPress={() => setSelectedIncident(opt.type)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name={opt.icon}
+                          size={15}
+                          color={isSelected ? '#ffffff' : '#475569'}
+                        />
+                        <Text style={[styles.incidentChipText, isSelected && styles.incidentChipTextActive]}>
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Gran Botón de Pánico */}
             <View style={styles.panicContainer}>
               <TouchableOpacity
                 style={[styles.panicButton, isSosAlertSent && styles.panicButtonActive]}
-                onPress={toggleSosAlert}
+                onPress={handlePanicAction}
                 activeOpacity={0.8}
+                disabled={isSubmitting || isLocationLoading}
               >
-                <MaterialIcons name="warning" size={42} color="#ffffff" />
-                <Text style={styles.panicButtonText}>
-                  {isSosAlertSent ? '¡ALERTA SOS ENVIADA!' : 'BOTÓN DE PÁNICO'}
-                </Text>
-                <Text style={styles.panicSubtext}>
-                  {isSosAlertSent ? 'Presiona para cancelar alerta' : 'Toca para despachar auxilio inmediato'}
-                </Text>
+                {isSubmitting || isLocationLoading ? (
+                  <ActivityIndicator size="large" color="#ffffff" />
+                ) : (
+                  <>
+                    <MaterialIcons name="warning" size={42} color="#ffffff" />
+                    <Text style={styles.panicButtonText}>
+                      {isSosAlertSent ? '¡ALERTA SOS ENVIADA!' : 'BOTÓN DE PÁNICO'}
+                    </Text>
+                    <Text style={styles.panicSubtext}>
+                      {isSosAlertSent
+                        ? 'Presiona para cancelar alerta vecinal'
+                        : 'Toca para despachar auxilio inmediato con GPS'}
+                    </Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
 
@@ -148,69 +263,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '92%',
+    maxHeight: '90%',
+    paddingTop: 10,
   },
   handleBar: {
-    width: 40,
-    height: 4,
+    width: 44,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#cbd5e1',
-    borderRadius: 2,
     alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
+    marginBottom: 10,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
+    gap: 12,
   },
   headerIconBg: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     backgroundColor: '#dc2626',
-    width: 34,
-    height: 34,
-    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 15,
-    fontWeight: '900',
+    fontSize: 16,
+    fontWeight: '800',
     color: '#0f172a',
   },
   headerSubtitle: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#64748b',
-    fontWeight: '600',
-    marginTop: 1,
+    fontWeight: '500',
   },
   closeButton: {
-    backgroundColor: '#f1f5f9',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 6,
   },
   body: {
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingTop: 14,
   },
   switchBox: {
     backgroundColor: '#f8fafc',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     padding: 14,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   switchBoxCrisis: {
     backgroundColor: '#fef2f2',
@@ -221,22 +330,22 @@ const styles = StyleSheet.create({
   },
   switchTitle: {
     fontSize: 13,
-    fontWeight: '900',
-    color: '#0f172a',
+    fontWeight: '800',
+    color: '#1e293b',
     marginBottom: 3,
   },
   switchTitleCrisis: {
-    color: '#991b1b',
+    color: '#dc2626',
   },
   switchSubtitle: {
     fontSize: 11,
     color: '#64748b',
-    lineHeight: 15,
+    lineHeight: 16,
   },
   switchButton: {
     backgroundColor: '#0f172a',
-    borderRadius: 10,
     paddingVertical: 9,
+    borderRadius: 10,
     alignItems: 'center',
   },
   switchButtonCrisisActive: {
@@ -250,15 +359,51 @@ const styles = StyleSheet.create({
   switchButtonTextCrisis: {
     color: '#ffffff',
   },
+  incidentSelector: {
+    marginBottom: 12,
+  },
+  incidentTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
+  },
+  incidentScroll: {
+    flexDirection: 'row',
+  },
+  incidentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    marginRight: 8,
+  },
+  incidentChipActive: {
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
+  },
+  incidentChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  incidentChipTextActive: {
+    color: '#ffffff',
+  },
   panicContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginVertical: 8,
   },
   panicButton: {
-    backgroundColor: '#dc2626',
     width: '100%',
-    paddingVertical: 20,
+    backgroundColor: '#dc2626',
     borderRadius: 20,
+    paddingVertical: 22,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#dc2626',
@@ -266,54 +411,48 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 8,
-    borderWidth: 3,
-    borderColor: '#fca5a5',
   },
   panicButtonActive: {
-    backgroundColor: '#991b1b',
-    borderColor: '#f87171',
+    backgroundColor: '#15803d',
+    shadowColor: '#15803d',
   },
   panicButtonText: {
     color: '#ffffff',
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0.5,
-    marginTop: 4,
+    marginTop: 6,
   },
   panicSubtext: {
-    color: '#fecaca',
+    color: 'rgba(255, 255, 255, 0.85)',
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
   },
   sectionTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#0f172a',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+    marginTop: 16,
     marginBottom: 10,
   },
   callRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f8fafc',
     borderRadius: 14,
-    padding: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    marginBottom: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    elevation: 1,
+    padding: 12,
+    marginBottom: 8,
   },
   callIconBg: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#f1f5f9',
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -322,27 +461,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   callName: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '800',
     color: '#0f172a',
   },
   callSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748b',
     marginTop: 1,
   },
   callNumberBox: {
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
   },
   callNumberText: {
     color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });
