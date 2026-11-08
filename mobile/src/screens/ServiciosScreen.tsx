@@ -56,7 +56,7 @@ const SERVICE_PRESETS = [
 ];
 
 export const ServiciosScreen = () => {
-  const { showToast, isCrisisRealActive, proximityRadius, isNetworkOnline } = useApp();
+  const { showToast, isCrisisRealActive, proximityRadius, isNetworkOnline, addCustomService } = useApp();
   const { currentUser } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -289,6 +289,7 @@ export const ServiciosScreen = () => {
     };
 
     setProviders((prev) => [nuevoServicio, ...prev]);
+    addCustomService(nuevoServicio);
 
     // Persistencia offline en SQLite local
     saveLocalServiceToSQLite(nuevoServicio);

@@ -33,9 +33,18 @@ const CRISIS_ITEMS = [
   { id: 'vulnerable-4', type: 'vulnerable', label: 'Persona vulnerable (Madre Gestante)', detail: 'Calle Los Sauces · Mz. B', latitude: -11.8675, longitude: -77.0765, icon: 'accessibility' },
 ] as const;
 
-type CommunityItem = (typeof COMMUNITY_ITEMS)[number];
-type CrisisItem = (typeof CRISIS_ITEMS)[number];
-type AnyMapItem = CommunityItem | CrisisItem;
+export interface MapPinItem {
+  id: string;
+  type: string;
+  label: string;
+  detail: string;
+  latitude: number;
+  longitude: number;
+  icon: string;
+  count?: number;
+}
+
+type AnyMapItem = MapPinItem;
 
 const MAP_REGION = {
   latitude: -11.8675,
@@ -67,14 +76,37 @@ const TYPE_COLORS: Record<string, string> = {
 
 export const CrisisMap = () => {
   const mapRef = useRef<MapView | null>(null);
-  const { isCrisisRealActive, toggleCrisisRealMode } = useApp();
+  const { isCrisisRealActive, toggleCrisisRealMode, customServices, customFavores } = useApp();
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<AnyMapItem | null>(null);
 
   const canViewVulnerableLocations = CURRENT_USER.role === 'Junta Vecinal';
 
+  // Convertir servicios y favores publicados dinámicamente en pines interactivos
+  const dynamicServiceItems: AnyMapItem[] = (customServices || []).map((s, idx) => ({
+    id: `dyn-serv-${s.id}`,
+    type: 'servicio' as const,
+    label: `${s.role} (${s.name})`,
+    detail: `${s.location} · ${s.specialtyDetails}`,
+    latitude: -11.8672 - (idx * 0.0006),
+    longitude: -77.0758 + (idx * 0.0005),
+    icon: s.category === 'salud_bienestar' ? 'medkit' : s.category === 'alimentacion' ? 'restaurant' : 'construct',
+  }));
+
+  const dynamicFavorItems: AnyMapItem[] = (customFavores || []).map((f, idx) => ({
+    id: `dyn-fav-${f.id}`,
+    type: 'favor' as const,
+    label: `${f.title} (${f.ownerName})`,
+    detail: `${f.location} · ${f.description}`,
+    latitude: -11.8665 + (idx * 0.0005),
+    longitude: -77.0746 - (idx * 0.0004),
+    icon: f.categoria === 'donacion' ? 'cube' : f.categoria === 'acompanamiento' ? 'people' : 'gift',
+  }));
+
   // Selección dinámica de datos según estado de crisis (evolución de la app)
-  const currentItems = isCrisisRealActive ? CRISIS_ITEMS : COMMUNITY_ITEMS;
+  const currentItems = isCrisisRealActive
+    ? CRISIS_ITEMS
+    : [...dynamicServiceItems, ...dynamicFavorItems, ...COMMUNITY_ITEMS];
   const currentLabels = isCrisisRealActive ? CRISIS_LABELS : COMMUNITY_LABELS;
 
   const availableFilters: { type: string; label: string; count?: number }[] = [
@@ -96,7 +128,7 @@ export const CrisisMap = () => {
       (activeFilter === 'all' || item.type === activeFilter)
   );
 
-  const visibleClusters = visibleItems.filter((i) => i.type === 'cluster') as CrisisItem[];
+  const visibleClusters = visibleItems.filter((i) => i.type === 'cluster') as MapPinItem[];
 
   const focusMap = (item: AnyMapItem) => {
     setSelectedItem(item);

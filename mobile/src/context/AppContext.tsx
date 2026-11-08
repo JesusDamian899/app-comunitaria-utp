@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { NavigationTab } from '../types';
+import type { NavigationTab, ServiceProvider, SolidaridadFavor } from '../types';
 import { getSQLiteKeyValue, setSQLiteKeyValue } from '../lib/sqliteDatabase';
 
 export interface CustomAviso {
@@ -53,6 +53,12 @@ interface AppContextType {
   closeAvisoModal: () => void;
   customAvisos: CustomAviso[];
   addCustomAviso: (aviso: Omit<CustomAviso, 'id' | 'timeAgo'>) => void;
+
+  // Servicios y Favores dinámicos en tiempo real para el Mapa
+  customServices: ServiceProvider[];
+  addCustomService: (service: ServiceProvider) => void;
+  customFavores: SolidaridadFavor[];
+  addCustomFavor: (favor: SolidaridadFavor) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -74,6 +80,18 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const [isAvisoModalOpen, setIsAvisoModalOpen] = useState<boolean>(false);
   const [customAvisos, setCustomAvisos] = useState<CustomAviso[]>([]);
+
+  // Servicios y Favores dinámicos en tiempo real para el Mapa
+  const [customServices, setCustomServices] = useState<ServiceProvider[]>([]);
+  const [customFavores, setCustomFavores] = useState<SolidaridadFavor[]>([]);
+
+  const addCustomService = (service: ServiceProvider) => {
+    setCustomServices((prev) => [service, ...prev]);
+  };
+
+  const addCustomFavor = (favor: SolidaridadFavor) => {
+    setCustomFavores((prev) => [favor, ...prev]);
+  };
 
   // Carga inicial de persistencia SQLite / AsyncStorage
   useEffect(() => {
@@ -221,6 +239,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         closeAvisoModal,
         customAvisos,
         addCustomAviso,
+        customServices,
+        addCustomService,
+        customFavores,
+        addCustomFavor,
       }}
     >
       {children}

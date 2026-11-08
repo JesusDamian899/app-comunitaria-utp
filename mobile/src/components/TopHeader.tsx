@@ -65,16 +65,11 @@ export const TopHeader = () => {
               <Text style={styles.tutorialBtnText}>Tutorial</Text>
             </TouchableOpacity>
 
-            {/* Botón SOS / Crisis */}
-            {isCrisisRealActive ? (
-              <TouchableOpacity style={styles.crisisAlertBadge} onPress={openSos} activeOpacity={0.8}>
+            {/* Indicador pasivo solo en Modo Crisis */}
+            {isCrisisRealActive && (
+              <View style={styles.crisisAlertBadge}>
                 <Text style={styles.crisisAlertText}>🚨 CRISIS</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={styles.sosPill} onPress={openSos} activeOpacity={0.8}>
-                <Ionicons name="shield" size={13} color="#dc2626" />
-                <Text style={styles.sosPillText}>SOS</Text>
-              </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>

@@ -64,7 +64,7 @@ const PRESETS_CRISIS = [
 ];
 
 export const SolidaridadScreen = () => {
-  const { showToast, isCrisisRealActive, proximityRadius, isNetworkOnline } = useApp();
+  const { showToast, isCrisisRealActive, proximityRadius, isNetworkOnline, addCustomFavor } = useApp();
   const { currentUser, addFavorCompleted } = useAuth();
   const { saveToOfflineQueue } = useOfflineSync();
 
@@ -231,6 +231,7 @@ export const SolidaridadScreen = () => {
 
     // 1. Optimistic UI update
     setFavores((prev) => [newFav, ...prev]);
+    addCustomFavor(newFav);
     addFavorCompleted();
 
     // 2. Persistencia en SQLite local (Directa y Cola Offline)
