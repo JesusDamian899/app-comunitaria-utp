@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
+import { supabase } from '../lib/supabaseClient';
 
 // /Fase4: Persistencia local de SOS; AsyncStorage queda solo para migrar la cola antigua.
 const OFFLINE_QUEUE_KEY = '@sos_offline_queue';
@@ -159,10 +160,49 @@ export const useOfflineSync = () => {
   };
 
   const syncOfflineData = useCallback(async () => {
-    if (!isOnline || offlineQueue.length === 0) return;
+    if (!isOnline || offlineQueue.length === 0 || !supabase) return;
 
-    // /Fase4: No borrar la cola hasta que exista una sincronización remota confirmada.
-    console.warn('La sincronización remota aún no está configurada; los reportes siguen en SQLite.');
+    try {
+      const database = await getDatabase();
+      const rows = await database.getAllAsync<{ id: string; payload: string }>(
+        `SELECT id, payload FROM ${DATABASE_TABLE}`
+      );
+
+      for (const row of rows) {
+        let report: Record<string, unknown>;
+        try {
+          report = JSON.parse(row.payload);
+        } catch {
+          continue;
+        }
+
+        const coords = report.coordinates as { latitude: number; longitude: number } | undefined;
+        const lat = coords?.latitude ?? -11.8675;
+        const lon = coords?.longitude ?? -77.0754;
+        const pointWkt = `SRID=4326;POINT(${lon} ${lat})`;
+
+        const userIdStr = typeof report.userId === 'string' ? report.userId : '';
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userIdStr);
+
+        const { error } = await supabase.from('alertas_emergencia').insert({
+          vecino_id: isUuid ? userIdStr : null,
+          tipo_emergencia: String(report.incident || report.type || 'ALERTA'),
+          gravedad: String(report.status || 'alta'),
+          ubicacion: pointWkt,
+        });
+
+        // Solo si Supabase confirmó el guardado con éxito lo retiramos de SQLite
+        if (!error) {
+          await database.runAsync(`DELETE FROM ${DATABASE_TABLE} WHERE id = ?`, row.id);
+        } else {
+          console.warn('Aviso sincronización SOS (mantenido en SQLite):', error.message);
+        }
+      }
+
+      await publishOfflineQueue();
+    } catch (err) {
+      console.warn('Error en syncOfflineData (reportes preservados localmente):', err);
+    }
   }, [isOnline, offlineQueue]);
 
   return {

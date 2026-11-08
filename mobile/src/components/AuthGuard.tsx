@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient';
 import { AuthScreen } from '../screens/AuthScreen';
 import { CURRENT_USER } from '../mock/data';
 import type { UserProfile, CommunityStatusLevel } from '../types';
+import { getSQLiteKeyValue, setSQLiteKeyValue } from '../lib/sqliteDatabase';
 
 export const getCommunityStatusLevel = (favores: number): CommunityStatusLevel => {
   if (favores >= 20) return 'heroe_del_barrio';
@@ -99,34 +100,57 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
+    const checkInitialSession = async () => {
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user && isMounted) {
+            await syncUserProfile(data.session.user);
+            setIsAuthenticated(true);
+            return;
+          }
+        } catch (err) {
+          console.warn('Sesión no encontrada o Supabase fuera de línea:', err);
+        }
+      }
+
+      // Si no hay sesión Supabase activa, verificar si estaba en Modo Demo persistido en SQLite
+      const isDemo = await getSQLiteKeyValue<boolean>('is_demo_authenticated', false);
+      if (isDemo && isMounted) {
+        handleDemoLogin();
+      }
+    };
+
+    checkInitialSession();
+
     if (!supabase) return;
 
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session?.user) {
-        await syncUserProfile(data.session.user);
-        setIsAuthenticated(true);
-      }
-    });
-
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
+      if (session?.user && isMounted) {
         await syncUserProfile(session.user);
         setIsAuthenticated(true);
       } else {
-        setIsAuthenticated(false);
+        const isDemo = await getSQLiteKeyValue<boolean>('is_demo_authenticated', false);
+        if (!isDemo && isMounted) {
+          setIsAuthenticated(false);
+        }
       }
     });
 
     return () => {
+      isMounted = false;
       listener.subscription.unsubscribe();
     };
   }, []);
 
-  const handleDemoLogin = () => {
+  const handleDemoLogin = async () => {
     // Restauramos los datos originales de Carlos Mendoza
     Object.assign(CURRENT_USER, DEMO_USER_BACKUP);
     setCurrentUser({ ...DEMO_USER_BACKUP });
     setIsAuthenticated(true);
+    await setSQLiteKeyValue('is_demo_authenticated', true);
   };
 
   const handleRealLogin = async (loggedInUser?: User) => {
@@ -158,6 +182,7 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    await setSQLiteKeyValue('is_demo_authenticated', false);
     if (supabase) {
       await supabase.auth.signOut();
     }

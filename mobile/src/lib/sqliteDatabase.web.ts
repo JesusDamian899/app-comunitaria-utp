@@ -3,6 +3,38 @@ import type { ServiceProvider, SolidaridadFavor, ServiceReview } from '../types'
 
 const STORAGE_PREFIX = '@comunidad_sqlite_web:';
 
+// ==========================================
+// REGISTROS ELIMINADOS (SOFT/HARD DELETE)
+// ==========================================
+
+export const markRecordDeletedInSQLite = async (id: string): Promise<void> => {
+  try {
+    const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}deleted_records`);
+    const set: string[] = raw ? JSON.parse(raw) : [];
+    if (!set.includes(id)) {
+      set.push(id);
+      await AsyncStorage.setItem(`${STORAGE_PREFIX}deleted_records`, JSON.stringify(set));
+    }
+  } catch (error) {
+    console.error('Error marcando registro eliminado en Web:', error);
+  }
+};
+
+export const getDeletedRecordIdsFromSQLite = async (): Promise<Set<string>> => {
+  try {
+    const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}deleted_records`);
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    return new Set(list);
+  } catch (error) {
+    console.error('Error leyendo registros eliminados en Web:', error);
+    return new Set();
+  }
+};
+
+// ==========================================
+// 1. GESTIÓN DE SERVICIOS EN WEB (CRUD)
+// ==========================================
+
 export const saveLocalServiceToSQLite = async (service: ServiceProvider): Promise<boolean> => {
   try {
     const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}servicios`);
@@ -26,6 +58,36 @@ export const getLocalServicesFromSQLite = async (): Promise<ServiceProvider[]> =
   }
 };
 
+export const updateLocalServiceDetailsInSQLite = async (service: ServiceProvider): Promise<boolean> => {
+  try {
+    const list = await getLocalServicesFromSQLite();
+    const idx = list.findIndex((s) => s.id === service.id);
+    if (idx >= 0) {
+      list[idx] = service;
+    } else {
+      list.unshift(service);
+    }
+    await AsyncStorage.setItem(`${STORAGE_PREFIX}servicios`, JSON.stringify(list));
+    return true;
+  } catch (error) {
+    console.error('Error actualizando servicio en Web:', error);
+    return false;
+  }
+};
+
+export const deleteServiceFromSQLite = async (serviceId: string): Promise<boolean> => {
+  try {
+    const list = await getLocalServicesFromSQLite();
+    const filtered = list.filter((s) => s.id !== serviceId);
+    await AsyncStorage.setItem(`${STORAGE_PREFIX}servicios`, JSON.stringify(filtered));
+    await markRecordDeletedInSQLite(serviceId);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando servicio en Web:', error);
+    return false;
+  }
+};
+
 export const updateServiceInSQLite = async (
   serviceId: string,
   newRecommendations: number,
@@ -45,6 +107,10 @@ export const updateServiceInSQLite = async (
   }
 };
 
+// ==========================================
+// 2. GESTIÓN DE FAVORES EN WEB (CRUD)
+// ==========================================
+
 export const saveLocalFavorToSQLite = async (favor: SolidaridadFavor): Promise<boolean> => {
   try {
     const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}favores`);
@@ -54,6 +120,46 @@ export const saveLocalFavorToSQLite = async (favor: SolidaridadFavor): Promise<b
     return true;
   } catch (error) {
     console.error('Error guardando favor en Web:', error);
+    return false;
+  }
+};
+
+export const getLocalFavoresFromSQLite = async (): Promise<SolidaridadFavor[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}favores`);
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error('Error leyendo favores en Web:', error);
+    return [];
+  }
+};
+
+export const updateLocalFavorDetailsInSQLite = async (favor: SolidaridadFavor): Promise<boolean> => {
+  try {
+    const list = await getLocalFavoresFromSQLite();
+    const idx = list.findIndex((f) => f.id === favor.id);
+    if (idx >= 0) {
+      list[idx] = favor;
+    } else {
+      list.unshift(favor);
+    }
+    await AsyncStorage.setItem(`${STORAGE_PREFIX}favores`, JSON.stringify(list));
+    return true;
+  } catch (error) {
+    console.error('Error actualizando favor en Web:', error);
+    return false;
+  }
+};
+
+export const deleteFavorFromSQLite = async (favorId: string): Promise<boolean> => {
+  try {
+    const list = await getLocalFavoresFromSQLite();
+    const filtered = list.filter((f) => f.id !== favorId);
+    await AsyncStorage.setItem(`${STORAGE_PREFIX}favores`, JSON.stringify(filtered));
+    await markRecordDeletedInSQLite(favorId);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando favor en Web:', error);
     return false;
   }
 };
@@ -73,15 +179,9 @@ export const updateFavorStatusInSQLite = async (
   }
 };
 
-export const getLocalFavoresFromSQLite = async (): Promise<SolidaridadFavor[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(`${STORAGE_PREFIX}favores`);
-    return raw ? JSON.parse(raw) : [];
-  } catch (error) {
-    console.error('Error leyendo favores en Web:', error);
-    return [];
-  }
-};
+// ==========================================
+// 3. GESTIÓN DE ESTADOS CLAVE-VALOR EN WEB
+// ==========================================
 
 export const setSQLiteKeyValue = async (key: string, value: any): Promise<void> => {
   try {

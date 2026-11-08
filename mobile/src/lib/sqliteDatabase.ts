@@ -39,6 +39,12 @@ export const getSQLiteDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
           key TEXT PRIMARY KEY NOT NULL,
           value TEXT NOT NULL
         );
+
+        -- Tabla SQLite para IDs eliminados (evita que reaparezcan si la nube o mocks los tienen)
+        CREATE TABLE IF NOT EXISTS deleted_records (
+          id TEXT PRIMARY KEY NOT NULL,
+          deleted_at INTEGER NOT NULL
+        );
       `);
       return db;
     })().catch((err) => {
@@ -50,7 +56,37 @@ export const getSQLiteDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
 };
 
 // ==========================================
-// 1. GESTIÓN DE SERVICIOS EN SQLITE
+// REGISTROS ELIMINADOS (SOFT/HARD DELETE)
+// ==========================================
+
+export const markRecordDeletedInSQLite = async (id: string): Promise<void> => {
+  try {
+    const db = await getSQLiteDatabase();
+    await db.runAsync(
+      `INSERT INTO deleted_records (id, deleted_at)
+       VALUES (?, ?)
+       ON CONFLICT(id) DO UPDATE SET deleted_at = excluded.deleted_at`,
+      id,
+      Date.now()
+    );
+  } catch (error) {
+    console.error('Error marcando registro eliminado en SQLite:', error);
+  }
+};
+
+export const getDeletedRecordIdsFromSQLite = async (): Promise<Set<string>> => {
+  try {
+    const db = await getSQLiteDatabase();
+    const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM deleted_records`);
+    return new Set(rows.map((r) => r.id));
+  } catch (error) {
+    console.error('Error leyendo registros eliminados desde SQLite:', error);
+    return new Set();
+  }
+};
+
+// ==========================================
+// 1. GESTIÓN DE SERVICIOS EN SQLITE (CRUD)
 // ==========================================
 
 export const saveLocalServiceToSQLite = async (service: ServiceProvider): Promise<boolean> => {
@@ -84,6 +120,36 @@ export const getLocalServicesFromSQLite = async (): Promise<ServiceProvider[]> =
   }
 };
 
+export const updateLocalServiceDetailsInSQLite = async (service: ServiceProvider): Promise<boolean> => {
+  try {
+    const db = await getSQLiteDatabase();
+    await db.runAsync(
+      `INSERT INTO local_servicios (id, payload, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      service.id,
+      JSON.stringify(service),
+      Date.now()
+    );
+    return true;
+  } catch (error) {
+    console.error('Error actualizando servicio en SQLite:', error);
+    return false;
+  }
+};
+
+export const deleteServiceFromSQLite = async (serviceId: string): Promise<boolean> => {
+  try {
+    const db = await getSQLiteDatabase();
+    await db.runAsync(`DELETE FROM local_servicios WHERE id = ?`, serviceId);
+    await markRecordDeletedInSQLite(serviceId);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando servicio de SQLite:', error);
+    return false;
+  }
+};
+
 export const updateServiceInSQLite = async (
   serviceId: string,
   newRecommendations: number,
@@ -114,7 +180,7 @@ export const updateServiceInSQLite = async (
 };
 
 // ==========================================
-// 2. GESTIÓN DE FAVOR EN SOLIDARIDAD EN SQLITE
+// 2. GESTIÓN DE FAVOR EN SOLIDARIDAD EN SQLITE (CRUD)
 // ==========================================
 
 export const saveLocalFavorToSQLite = async (favor: SolidaridadFavor): Promise<boolean> => {
@@ -131,6 +197,49 @@ export const saveLocalFavorToSQLite = async (favor: SolidaridadFavor): Promise<b
     return true;
   } catch (error) {
     console.error('Error guardando favor en SQLite:', error);
+    return false;
+  }
+};
+
+export const getLocalFavoresFromSQLite = async (): Promise<SolidaridadFavor[]> => {
+  try {
+    const db = await getSQLiteDatabase();
+    const rows = await db.getAllAsync<{ payload: string }>(
+      `SELECT payload FROM local_favores ORDER BY created_at DESC`
+    );
+    return rows.map((r) => JSON.parse(r.payload) as SolidaridadFavor);
+  } catch (error) {
+    console.error('Error leyendo favores desde SQLite:', error);
+    return [];
+  }
+};
+
+export const updateLocalFavorDetailsInSQLite = async (favor: SolidaridadFavor): Promise<boolean> => {
+  try {
+    const db = await getSQLiteDatabase();
+    await db.runAsync(
+      `INSERT INTO local_favores (id, payload, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      favor.id,
+      JSON.stringify(favor),
+      Date.now()
+    );
+    return true;
+  } catch (error) {
+    console.error('Error actualizando detalles del favor en SQLite:', error);
+    return false;
+  }
+};
+
+export const deleteFavorFromSQLite = async (favorId: string): Promise<boolean> => {
+  try {
+    const db = await getSQLiteDatabase();
+    await db.runAsync(`DELETE FROM local_favores WHERE id = ?`, favorId);
+    await markRecordDeletedInSQLite(favorId);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando favor de SQLite:', error);
     return false;
   }
 };
@@ -156,20 +265,7 @@ export const updateFavorStatusInSQLite = async (
       favorId
     );
   } catch (error) {
-    console.error('Error actualizando favor en SQLite:', error);
-  }
-};
-
-export const getLocalFavoresFromSQLite = async (): Promise<SolidaridadFavor[]> => {
-  try {
-    const db = await getSQLiteDatabase();
-    const rows = await db.getAllAsync<{ payload: string }>(
-      `SELECT payload FROM local_favores ORDER BY created_at DESC`
-    );
-    return rows.map((r) => JSON.parse(r.payload) as SolidaridadFavor);
-  } catch (error) {
-    console.error('Error leyendo favores desde SQLite:', error);
-    return [];
+    console.error('Error actualizando estado del favor en SQLite:', error);
   }
 };
 

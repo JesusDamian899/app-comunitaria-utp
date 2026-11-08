@@ -10,7 +10,8 @@ import {
   Modal, 
   Linking,
   KeyboardAvoidingView,
-  Platform 
+  Platform,
+  Alert
 } from 'react-native';
 import { 
   Ionicons, 
@@ -19,7 +20,7 @@ import {
   MaterialCommunityIcons 
 } from '@expo/vector-icons';
 import { MOCK_PROVIDERS } from '../mock/data';
-import type { ServiceProvider, ServiceCategoryType } from '../types';
+import type { ServiceProvider, ServiceCategoryType, TipoActividadServicio } from '../types';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
@@ -27,6 +28,9 @@ import {
   saveLocalServiceToSQLite,
   getLocalServicesFromSQLite,
   updateServiceInSQLite,
+  updateLocalServiceDetailsInSQLite,
+  deleteServiceFromSQLite,
+  getDeletedRecordIdsFromSQLite,
 } from '../lib/sqliteDatabase';
 
 const CATEGORIES_NORMAL: { id: ServiceCategoryType; label: string; icon: string }[] = [
@@ -82,51 +86,101 @@ export const ServiciosScreen = () => {
   const [newTipo, setNewTipo] = useState<'oficio' | 'profesion'>('oficio');
   const [newDesc, setNewDesc] = useState('');
 
-  // Sincronización híbrida: SQLite local + Supabase
-  useEffect(() => {
-    // 1. Carga offline desde SQLite
-    getLocalServicesFromSQLite().then((localSaved) => {
-      if (localSaved && localSaved.length > 0) {
-        setProviders((prev) => {
-          const ids = new Set(localSaved.map((s) => s.id));
-          return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
-        });
-      }
-    });
+  // Modal Editar Servicio (CRUD)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingService, setEditingService] = useState<ServiceProvider | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editTarifa, setEditTarifa] = useState('30');
+  const [editTipo, setEditTipo] = useState<'oficio' | 'profesion'>('oficio');
+  const [editCategory, setEditCategory] = useState<ServiceCategoryType>('mantenimiento_hogar');
+  const [editColegiatura, setEditColegiatura] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editPhone, setEditPhone] = useState('');
 
-    // 2. Consulta remota en Supabase
-    if (supabase) {
-      supabase
-        .from('oficios_locales')
-        .select('*')
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const dbProviders: ServiceProvider[] = data.map((d: any) => ({
-              id: d.id,
-              name: d.rol_oficio || 'Vecino Especialista',
-              experience: d.experiencia || 'Vecino del barrio',
-              role: d.rol_oficio || 'Servicio Local',
-              location: 'Sector 2 • Mz. B (Urb. Las Palmeras)',
-              avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-              recommendationsCount: d.recomendaciones || 5,
-              specialtyDetails: d.descripcion || 'Servicio calificado en la urbanización.',
-              category: d.categoria || 'mantenimiento_hogar',
-              tipoActividad: d.tipo_actividad || 'oficio',
-              colegiatura: d.colegiatura,
-              verified: Boolean(d.verificado),
-              servicePin: d.service_pin || '3150',
-              phone: '955432109',
-              reviews: [],
-            }));
+  // Sincronización híbrida: SQLite local + Supabase con antirresurrección de borrados
+  useEffect(() => {
+    let isMounted = true;
+    const loadOficios = async () => {
+      const deletedIds = await getDeletedRecordIdsFromSQLite();
+
+      // 1. Carga offline desde SQLite
+      let localSaved: ServiceProvider[] = [];
+      try {
+        localSaved = (await getLocalServicesFromSQLite()).filter((s) => !deletedIds.has(s.id));
+        if (localSaved.length > 0 && isMounted) {
+          setProviders((prev) => {
+            const rawList = [...localSaved, ...prev];
+            const unique: ServiceProvider[] = [];
+            const seenIds = new Set<string>();
+            const seenContent = new Set<string>();
+            for (const item of rawList) {
+              if (!item || !item.id || deletedIds.has(item.id)) continue;
+              const contentKey = `${item.name.toLowerCase().trim()}_${item.role.toLowerCase().trim()}_${item.category}`;
+              if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                seenIds.add(item.id);
+                seenContent.add(contentKey);
+                unique.push(item);
+              }
+            }
+            return unique;
+          });
+        }
+      } catch (e) {
+        console.warn('Error leyendo oficios locales de SQLite:', e);
+      }
+
+      // 2. Consulta remota en Supabase
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('oficios_locales').select('*');
+          if (data && data.length > 0 && isMounted) {
+            const dbProviders: ServiceProvider[] = data
+              .filter((d: any) => !deletedIds.has(d.id))
+              .map((d: any) => ({
+                id: d.id,
+                name: d.rol_oficio || 'Vecino Especialista',
+                experience: d.experiencia || 'Vecino del barrio',
+                role: d.rol_oficio || 'Servicio Local',
+                location: 'Sector 2 • Mz. B (Urb. Las Palmeras)',
+                avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+                recommendationsCount: d.recomendaciones || 5,
+                specialtyDetails: d.descripcion || 'Servicio calificado en la urbanización.',
+                category: d.categoria || 'mantenimiento_hogar',
+                tipoActividad: d.tipo_actividad || 'oficio',
+                colegiatura: d.colegiatura,
+                verified: Boolean(d.verificado),
+                servicePin: d.service_pin || '3150',
+                phone: '955432109',
+                reviews: [],
+              }));
 
             setProviders((prev) => {
-              const ids = new Set(prev.map((p) => p.id));
-              const unique = dbProviders.filter((dp) => !ids.has(dp.id));
-              return [...unique, ...prev];
+              const rawList = [...dbProviders, ...prev];
+              const unique: ServiceProvider[] = [];
+              const seenIds = new Set<string>();
+              const seenContent = new Set<string>();
+              for (const item of rawList) {
+                if (!item || !item.id || deletedIds.has(item.id)) continue;
+                const contentKey = `${item.name.toLowerCase().trim()}_${item.role.toLowerCase().trim()}_${item.category}`;
+                if (!seenIds.has(item.id) && !seenContent.has(contentKey)) {
+                  seenIds.add(item.id);
+                  seenContent.add(contentKey);
+                  unique.push(item);
+                }
+              }
+              return unique;
             });
           }
-        });
-    }
+        } catch (err) {
+          console.warn('Error conectando con Supabase oficios_locales:', err);
+        }
+      }
+    };
+
+    loadOficios();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredProviders = useMemo(() => {
@@ -319,6 +373,109 @@ export const ServiciosScreen = () => {
     setNewColegiatura('');
   };
 
+  const handleOpenEdit = (service: ServiceProvider) => {
+    setEditingService(service);
+    setEditTitle(service.role);
+    setEditCategory(service.category);
+    setEditTipo(service.tipoActividad || 'oficio');
+    setEditColegiatura(service.colegiatura || '');
+    const matchTarifa = service.specialtyDetails.match(/Tarifa vecinal:\s*S\/\.\s*(\d+(\.\d+)?)/i);
+    setEditTarifa(matchTarifa ? matchTarifa[1] : (service.tarifa ? String(service.tarifa) : '30'));
+    const cleanDesc = service.specialtyDetails.split('• Tarifa vecinal')[0].trim();
+    setEditDesc(cleanDesc || service.specialtyDetails);
+    setEditPhone(service.phone || currentUser.phone || '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingService) return;
+    const tarifaNum = parseFloat(editTarifa) || 0;
+    if (tarifaNum > 100) {
+      showToast('⚠️ La tarifa propuesta supera el límite vecinal de S/. 100');
+      return;
+    }
+    if (!editTitle.trim()) {
+      showToast('Ingresa el nombre o especialidad del servicio');
+      return;
+    }
+    if (editTipo === 'profesion' && !editColegiatura.trim()) {
+      showToast('Para una Profesión acreditada debes indicar tu N° de Colegiatura');
+      return;
+    }
+
+    const updatedService: ServiceProvider = {
+      ...editingService,
+      role: editTitle.trim(),
+      category: editCategory,
+      tipoActividad: editTipo,
+      colegiatura: editTipo === 'profesion' ? editColegiatura.trim() : undefined,
+      verified: editTipo === 'profesion' || (editingService.recommendationsCount ?? 0) >= 5,
+      specialtyDetails: `${editDesc.trim() || editTitle.trim()} • Tarifa vecinal: S/. ${tarifaNum || 30}`,
+      phone: editPhone.trim() || editingService.phone,
+      tarifa: tarifaNum,
+    };
+
+    setProviders((prev) => prev.map((p) => (p.id === updatedService.id ? updatedService : p)));
+    setIsEditModalOpen(false);
+    setEditingService(null);
+    showToast('✓ Servicio actualizado con éxito');
+
+    // 1. Guardar en SQLite
+    await updateLocalServiceDetailsInSQLite(updatedService);
+
+    // 2. Si es Supabase UUID, actualizar en la nube
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(updatedService.id);
+    if (supabase && isUuid) {
+      try {
+        await supabase
+          .from('oficios_locales')
+          .update({
+            rol_oficio: updatedService.role,
+            categoria: updatedService.category,
+            tipo_actividad: updatedService.tipoActividad,
+            colegiatura: updatedService.colegiatura || null,
+            verificado: updatedService.verified,
+            descripcion: updatedService.specialtyDetails,
+          })
+          .eq('id', updatedService.id);
+      } catch (err) {
+        console.warn('Error al actualizar oficio en Supabase:', err);
+      }
+    }
+  };
+
+  const handleDeleteService = (service: ServiceProvider) => {
+    Alert.alert(
+      'Eliminar Servicio',
+      `¿Deseas eliminar "${service.role}" del directorio vecinal?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            // 1. Actualizar vista React
+            setProviders((prev) => prev.filter((p) => p.id !== service.id));
+            showToast('✓ Servicio eliminado del directorio');
+
+            // 2. Eliminar de SQLite y registrar en deleted_records
+            await deleteServiceFromSQLite(service.id);
+
+            // 3. Eliminar de Supabase si corresponde
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(service.id);
+            if (supabase && isUuid) {
+              try {
+                await supabase.from('oficios_locales').delete().eq('id', service.id);
+              } catch (err) {
+                console.warn('Error al eliminar oficio en Supabase:', err);
+              }
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const categories = isCrisisRealActive ? CATEGORIES_CRISIS : CATEGORIES_NORMAL;
 
   return (
@@ -453,6 +610,12 @@ export const ServiciosScreen = () => {
         const isTopTrust = provider.recommendationsCount >= 15;
         const isMidTrust = provider.recommendationsCount >= 5 && provider.recommendationsCount < 15;
         const hasContacted = contactedMap[provider.id];
+        const isOwner =
+          provider.ownerId === currentUser.id ||
+          provider.name === currentUser.name ||
+          provider.phone === currentUser.phone ||
+          provider.id.startsWith('prov-') ||
+          currentUser.role === 'Junta Vecinal';
 
         return (
           <View key={provider.id} style={[styles.providerCard, isCrisisRealActive && styles.providerCardCrisis]}>
@@ -474,6 +637,39 @@ export const ServiciosScreen = () => {
                 <Text style={styles.expBadgeText}>{provider.experience}</Text>
               </View>
             </View>
+
+            {/* Barra de Gestión CRUD para el Vecino Propietario o Junta */}
+            {isOwner && (
+              <View style={styles.ownerActionsBar}>
+                <View style={styles.ownerBadge}>
+                  <Ionicons name="person" size={11} color="#1d4ed8" />
+                  <Text style={styles.ownerBadgeText}>
+                    {currentUser.role === 'Junta Vecinal' && provider.name !== currentUser.name
+                      ? 'Gestión Junta'
+                      : 'Mi Publicación'}
+                  </Text>
+                </View>
+                <View style={styles.ownerButtonsGroup}>
+                  <TouchableOpacity
+                    style={styles.editBtn}
+                    onPress={() => handleOpenEdit(provider)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="pencil" size={13} color="#2563eb" />
+                    <Text style={styles.editBtnText}>Editar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDeleteService(provider)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="trash" size={13} color="#dc2626" />
+                    <Text style={styles.deleteBtnText}>Eliminar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Visto bueno según Niveles de Confianza */}
             <View style={styles.vistoBuenoRow}>
@@ -703,6 +899,150 @@ export const ServiciosScreen = () => {
                 <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
                 <Text style={styles.modalSubmitText}>Publicar Servicio en Supabase (2 clics)</Text>
               </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal Editar Mi Servicio (CRUD) */}
+      <Modal visible={isEditModalOpen} transparent animationType="slide">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCardLarge}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ backgroundColor: '#eff6ff', padding: 6, borderRadius: 8 }}>
+                  <Ionicons name="pencil" size={18} color="#2563eb" />
+                </View>
+                <Text style={styles.modalTitle}>Editar Mi Servicio</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsEditModalOpen(false)}>
+                <Ionicons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>1. Tipo de Actividad</Text>
+              <View style={styles.tipoRow}>
+                <TouchableOpacity
+                  style={[styles.tipoButton, editTipo === 'oficio' && styles.tipoButtonActive]}
+                  onPress={() => setEditTipo('oficio')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipoButtonText, editTipo === 'oficio' && styles.tipoButtonTextActive]}>
+                    Oficio (Por Vistos Buenos)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.tipoButton, editTipo === 'profesion' && styles.tipoButtonActive]}
+                  onPress={() => setEditTipo('profesion')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipoButtonText, editTipo === 'profesion' && styles.tipoButtonTextActive]}>
+                    Profesión (Acreditada)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {editTipo === 'profesion' && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.inputLabel}>N° de Colegiatura Profesional *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ej: CEP #48291, CIP #102938, CAL #71204"
+                    placeholderTextColor="#94a3b8"
+                    value={editColegiatura}
+                    onChangeText={setEditColegiatura}
+                  />
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>2. Categoría del Servicio</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {CATEGORIES_NORMAL.filter((c) => c.id !== 'todos').map((cat) => {
+                  const isCatSelected = editCategory === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.categoryChip,
+                        isCatSelected && styles.categoryChipActive,
+                        { marginRight: 8 },
+                      ]}
+                      onPress={() => setEditCategory(cat.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isCatSelected && styles.categoryChipTextActive,
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <Text style={styles.inputLabel}>3. Especialidad o Título</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: Electricista domiciliario, Plomero..."
+                placeholderTextColor="#94a3b8"
+                value={editTitle}
+                onChangeText={setEditTitle}
+              />
+
+              <Text style={styles.inputLabel}>4. Tarifa Vecinal (Máx: S/. 100)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: 45"
+                keyboardType="numeric"
+                value={editTarifa}
+                onChangeText={setEditTarifa}
+              />
+
+              <Text style={styles.inputLabel}>5. Detalles y Cobertura</Text>
+              <TextInput
+                style={[styles.textInput, { height: 70, textAlignVertical: 'top' }]}
+                multiline
+                placeholder="Describe tu disponibilidad, herramientas y experiencia..."
+                placeholderTextColor="#94a3b8"
+                value={editDesc}
+                onChangeText={setEditDesc}
+              />
+
+              <Text style={styles.inputLabel}>6. Teléfono de Contacto (WhatsApp)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: 999 888 777"
+                keyboardType="phone-pad"
+                value={editPhone}
+                onChangeText={setEditPhone}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.createServiceButton, { flex: 1, backgroundColor: '#f1f5f9' }]}
+                  onPress={() => setIsEditModalOpen(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.createServiceButtonText, { color: '#475569' }]}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.createServiceButton, { flex: 2 }]}
+                  onPress={handleSaveEdit}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.createServiceButtonText}>Guardar Cambios</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ height: 20 }} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -1238,6 +1578,160 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   modalSubmitText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  ownerActionsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 8,
+  },
+  ownerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  ownerBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  ownerButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  editBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563eb',
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  deleteBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#dc2626',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalCardLarge: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    width: '100%',
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  modalBodyScroll: {
+    maxHeight: 520,
+  },
+  tipoRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  tipoButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+  },
+  tipoButtonActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+  tipoButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  tipoButtonTextActive: {
+    color: '#2563eb',
+    fontWeight: '800',
+  },
+  textInput: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#0f172a',
+    marginBottom: 12,
+  },
+  createServiceButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createServiceButtonText: {
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',

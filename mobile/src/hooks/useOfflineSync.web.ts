@@ -86,12 +86,18 @@ export const useOfflineSync = () => {
     }
   };
 
+  const syncOfflineData = useCallback(async () => {
+    // Sincronización Web
+  }, []);
+
   return {
     isOnline,
+    setIsOnline: () => {},
     offlineQueue,
     saveToOfflineQueue,
     removeFromOfflineQueue,
     clearOfflineQueue,
+    syncOfflineData,
     loadQueue,
   };
 };
