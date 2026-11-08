@@ -4,6 +4,7 @@ import type { UserProfile } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { AuthScreen } from '../screens/AuthScreen';
 import { CURRENT_USER } from '../mock/data';
+import { getSQLiteKeyValue, setSQLiteKeyValue } from '../lib/sqliteDatabase';
 
 export type CommunityStatusLevel = 'bronce' | 'plata' | 'oro' | 'heroe_del_barrio';
 
@@ -88,7 +89,10 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
     const telefono = dbProfile?.telefono || meta.telefono || '999 888 777';
     const servicePin = dbProfile?.service_pin || meta.service_pin || '4826';
     const vistosBuenos = dbProfile?.vistos_buenos ?? meta.vistosBuenos ?? CURRENT_USER.vistosBuenos ?? 0;
-    const favoresCount = dbProfile?.favores_realizados ?? meta.favoresCount ?? CURRENT_USER.favoresCount ?? 0;
+    
+    // Respetar el conteo acumulado de favores en SQLite si es mayor o si estamos sin conexión
+    const localFavores = await getSQLiteKeyValue<number>(`user_favores_${user.id}`, 0);
+    const favoresCount = Math.max(localFavores, dbProfile?.favores_realizados ?? meta.favoresCount ?? CURRENT_USER.favoresCount ?? 0);
 
     Object.assign(CURRENT_USER, {
       id: user.id,
@@ -112,39 +116,59 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
+    const checkInitialSession = async () => {
+      if (supabase) {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user && isMounted) {
+            await syncUserProfile(data.session.user);
+            setIsAuthenticated(true);
+            return;
+          }
+        } catch (err) {
+          console.warn('Sesión no encontrada o Supabase fuera de línea:', err);
+        }
+      }
+
+      // Si no hay sesión Supabase activa, verificar si estaba en Modo Demo persistido en SQLite
+      const isDemo = await getSQLiteKeyValue<boolean>('is_demo_authenticated', false);
+      if (isDemo && isMounted) {
+        await handleDemoLogin();
+      }
+    };
+
+    checkInitialSession();
+
     if (!supabase) return;
 
-    supabase.auth
-      .getSession()
-      .then(async ({ data }) => {
-        if (data?.session?.user) {
-          await syncUserProfile(data.session.user);
-          setIsAuthenticated(true);
-        }
-      })
-      .catch((err) => {
-        console.warn('Sesión no encontrada o Supabase fuera de línea:', err);
-      });
-
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
+      if (session?.user && isMounted) {
         await syncUserProfile(session.user);
         setIsAuthenticated(true);
       } else {
-        setIsAuthenticated(false);
+        const isDemo = await getSQLiteKeyValue<boolean>('is_demo_authenticated', false);
+        if (!isDemo && isMounted) {
+          setIsAuthenticated(false);
+        }
       }
     });
 
     return () => {
+      isMounted = false;
       listener.subscription.unsubscribe();
     };
   }, []);
 
-  const handleDemoLogin = () => {
-    // Restauramos los datos originales de Carlos Mendoza
-    Object.assign(CURRENT_USER, DEMO_USER_BACKUP);
-    setCurrentUser({ ...DEMO_USER_BACKUP });
+  const handleDemoLogin = async () => {
+    // Restauramos los datos originales de Carlos Mendoza con favores de SQLite
+    const savedFavores = await getSQLiteKeyValue<number>(`user_favores_${DEMO_USER_BACKUP.id}`, DEMO_USER_BACKUP.favoresCount ?? 1);
+    const demoUser = { ...DEMO_USER_BACKUP, favoresCount: savedFavores };
+    Object.assign(CURRENT_USER, demoUser);
+    setCurrentUser({ ...demoUser });
     setIsAuthenticated(true);
+    await setSQLiteKeyValue('is_demo_authenticated', true);
   };
 
   const handleRealLogin = async () => {
@@ -162,6 +186,7 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
+    await setSQLiteKeyValue('is_demo_authenticated', false);
     if (supabase) {
       try {
         await supabase.auth.signOut();
@@ -178,6 +203,9 @@ export const AuthGuard = ({ children }: { children: ReactNode }) => {
     const nextFavoresCount = (CURRENT_USER.favoresCount ?? 0) + 1;
     Object.assign(CURRENT_USER, { favoresCount: nextFavoresCount });
     setCurrentUser({ ...CURRENT_USER });
+
+    // Persistir conteo de favores en SQLite local
+    await setSQLiteKeyValue(`user_favores_${CURRENT_USER.id}`, nextFavoresCount);
 
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(CURRENT_USER.id);
     if (supabase && isUuid) {

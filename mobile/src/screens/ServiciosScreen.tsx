@@ -23,7 +23,11 @@ import type { ServiceProvider, ServiceCategoryType, TipoActividadServicio, Servi
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  saveLocalServiceToSQLite, 
+  getLocalServicesFromSQLite, 
+  updateServiceInSQLite 
+} from '../lib/sqliteDatabase';
 
 const CATEGORIES: { id: ServiceCategoryType; label: string; icon: string }[] = [
   { id: 'todos', label: 'Todos', icon: 'apps' },
@@ -44,25 +48,22 @@ export const ServiciosScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategoryType>('todos');
   const [providers, setProviders] = useState<ServiceProvider[]>(MOCK_PROVIDERS);
 
-  // Sincronización híbrida: AsyncStorage local + Supabase remoto
+  // Sincronización híbrida: SQLite local (comunidad.db) + Supabase remoto
   useEffect(() => {
     let isMounted = true;
     const loadOficios = async () => {
-      // 1. Cargar inmediatamente los servicios guardados en el almacenamiento del teléfono
+      // 1. Cargar inmediatamente los servicios persistidos en SQLite local
       let localSaved: ServiceProvider[] = [];
       try {
-        const raw = await AsyncStorage.getItem('@user_local_services');
-        if (raw) {
-          localSaved = JSON.parse(raw);
-          if (localSaved.length > 0 && isMounted) {
-            setProviders((prev) => {
-              const ids = new Set(localSaved.map((s) => s.id));
-              return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
-            });
-          }
+        localSaved = await getLocalServicesFromSQLite();
+        if (localSaved.length > 0 && isMounted) {
+          setProviders((prev) => {
+            const ids = new Set(localSaved.map((s) => s.id));
+            return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+          });
         }
       } catch (e) {
-        console.warn('Error leyendo servicios locales:', e);
+        console.warn('Error leyendo servicios desde SQLite:', e);
       }
 
       // 2. Consultar servicios remotos en Supabase
@@ -233,6 +234,9 @@ export const ServiciosScreen = () => {
     setRatedMap((prev) => ({ ...prev, [recommendingProvider.id]: true }));
     setContactedMap((prev) => ({ ...prev, [recommendingProvider.id]: false }));
 
+    // Persistir recomendación y reseña en SQLite local
+    updateServiceInSQLite(recommendingProvider.id, nextRecomms, newReview);
+
     // Si es un ID de Supabase, actualizamos la base de datos remota
     const isProvUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recommendingProvider.id);
     const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id);
@@ -314,14 +318,8 @@ export const ServiciosScreen = () => {
     setNewDesc('');
     setNewColegiatura('');
 
-    // 1. Guardar en AsyncStorage para persistencia local permanente (sobrevive al cerrar la app)
-    AsyncStorage.getItem('@user_local_services')
-      .then((raw) => {
-        const list: ServiceProvider[] = raw ? JSON.parse(raw) : [];
-        const updated = [nuevoServicio, ...list.filter((s) => s.id !== nuevoServicio.id)];
-        return AsyncStorage.setItem('@user_local_services', JSON.stringify(updated));
-      })
-      .catch((e) => console.warn('Error guardando oficio en AsyncStorage:', e));
+    // 1. Guardar en SQLite local permanente (comunidad.db)
+    saveLocalServiceToSQLite(nuevoServicio);
 
     // 2. Si el usuario está registrado en Supabase, lo guardamos en la nube
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id);

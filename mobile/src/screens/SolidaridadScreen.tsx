@@ -24,7 +24,11 @@ import { CommunityBadge } from '../components/CommunityBadge';
 import { useApp } from '../context/AppContext';
 import { useAuth, getCommunityStatusLevel } from '../components/AuthGuard';
 import { supabase } from '../lib/supabaseClient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  saveLocalFavorToSQLite, 
+  getLocalFavoresFromSQLite, 
+  updateFavorStatusInSQLite 
+} from '../lib/sqliteDatabase';
 
 export type SolidaridadFilterType = 'todos' | SolidaridadCategory;
 
@@ -44,25 +48,22 @@ export const SolidaridadScreen = () => {
   const [selectedCategory, setSelectedCategory] = useState<SolidaridadFilterType>('todos');
   const [favores, setFavores] = useState<SolidaridadFavor[]>(MOCK_FAVORES);
 
-  // Sincronización híbrida: AsyncStorage local + Supabase remoto
+  // Sincronización híbrida: SQLite local (comunidad.db) + Supabase remoto
   useEffect(() => {
     let isMounted = true;
     const loadMuro = async () => {
-      // 1. Cargar inmediatamente favores guardados en el almacenamiento del teléfono
+      // 1. Cargar inmediatamente favores guardados en SQLite local
       let localSaved: SolidaridadFavor[] = [];
       try {
-        const raw = await AsyncStorage.getItem('@user_local_favores');
-        if (raw) {
-          localSaved = JSON.parse(raw);
-          if (localSaved.length > 0 && isMounted) {
-            setFavores((prev) => {
-              const ids = new Set(localSaved.map((f) => f.id));
-              return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
-            });
-          }
+        localSaved = await getLocalFavoresFromSQLite();
+        if (localSaved.length > 0 && isMounted) {
+          setFavores((prev) => {
+            const ids = new Set(localSaved.map((f) => f.id));
+            return [...localSaved, ...prev.filter((p) => !ids.has(p.id))];
+          });
         }
       } catch (e) {
-        console.warn('Error leyendo favores locales:', e);
+        console.warn('Error leyendo favores locales desde SQLite:', e);
       }
 
       // 2. Consultar Supabase
@@ -188,6 +189,8 @@ export const SolidaridadScreen = () => {
     setFavores((prev) =>
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'ayuda_solicitada' } : item))
     );
+    // Persistir estado en SQLite local
+    updateFavorStatusInSQLite(favor.id, 'ayuda_solicitada');
   };
 
   const handleMarkAsReceived = (favor: SolidaridadFavor) => {
@@ -195,6 +198,9 @@ export const SolidaridadScreen = () => {
       prev.map((item) => (item.id === favor.id ? { ...item, estado: 'recibido' } : item))
     );
     addFavorCompleted();
+
+    // Persistir estado recibido en SQLite local
+    updateFavorStatusInSQLite(favor.id, 'recibido');
 
     // Si es un registro de Supabase, actualizamos el estado en la nube
     const isFavUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(favor.id);
@@ -256,14 +262,8 @@ export const SolidaridadScreen = () => {
     setNewTitle('');
     setNewDesc('');
 
-    // 1. Guardar en AsyncStorage para persistencia local permanente (sobrevive al reiniciar la app)
-    AsyncStorage.getItem('@user_local_favores')
-      .then((raw) => {
-        const list: SolidaridadFavor[] = raw ? JSON.parse(raw) : [];
-        const updated = [newFav, ...list.filter((f) => f.id !== newFav.id)];
-        return AsyncStorage.setItem('@user_local_favores', JSON.stringify(updated));
-      })
-      .catch((e) => console.warn('Error guardando favor en AsyncStorage:', e));
+    // 1. Guardar en SQLite local permanente (comunidad.db)
+    saveLocalFavorToSQLite(newFav);
 
     // 2. Si el usuario es de Supabase, lo persistimos en muro_solidario
     const isUserUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentUser.id);
