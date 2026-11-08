@@ -301,7 +301,7 @@ export const SolidaridadScreen = () => {
       donorBadgeLevel: dynamicBadgeLevel,
     };
 
-    setFavores((prev) => [newFav, ...prev]);
+    setFavores((prev) => [newFav, ...prev.filter((f) => f.id !== newFav.id)]);
     addFavorCompleted();
     showToast('¡Publicación agregada al Muro Solidario (+1 favor a tu estatus)!');
     setIsCreateModalOpen(false);

@@ -358,7 +358,7 @@ export const ServiciosScreen = () => {
       tarifa: tarifaNum,
     };
 
-    setProviders((prev) => [nuevoServicio, ...prev]);
+    setProviders((prev) => [nuevoServicio, ...prev.filter((p) => p.id !== nuevoServicio.id)]);
     showToast(`✓ Servicio publicado con tu PIN ${nuevoServicio.servicePin}`);
     setIsCreateModalOpen(false);
     setNewTitle('');
