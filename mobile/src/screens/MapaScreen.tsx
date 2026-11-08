@@ -5,18 +5,26 @@ import { CrisisMap } from '../components/CrisisMap';
 import { useApp } from '../context/AppContext';
 
 export const MapaScreen = () => {
-  const { proximityRadius, setProximityRadius, isNetworkOnline, isCrisisRealActive } = useApp();
+  const { proximityRadius, setProximityRadius, isNetworkOnline, isCrisisRealActive, toggleCrisisRealMode } = useApp();
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      {/* Header Informativo */}
-      <View style={styles.headerCard}>
+      {/* Header Informativo Dinámico */}
+      <View style={[styles.headerCard, isCrisisRealActive && styles.headerCardCrisis]}>
         <View style={styles.titleRow}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="map" size={24} color="#1d4ed8" />
+          <View style={[styles.iconCircle, isCrisisRealActive && styles.iconCircleCrisis]}>
+            <Ionicons
+              name={isCrisisRealActive ? 'warning' : 'map'}
+              size={24}
+              color={isCrisisRealActive ? '#dc2626' : '#1d4ed8'}
+            />
           </View>
           <View style={styles.titleTextContainer}>
-            <Text style={styles.mainTitle}>Mapa Comunitario Interactivo</Text>
+            <Text style={[styles.mainTitle, isCrisisRealActive && styles.mainTitleCrisis]}>
+              {isCrisisRealActive
+                ? 'Mapa Táctico de Emergencia y Rescate'
+                : 'Mapa de Economía Barrial y Solidaridad'}
+            </Text>
             <Text style={styles.subTitle}>
               Urb. Las Palmeras · {isNetworkOnline ? '🟢 GPS y Base de Datos Sincronizados' : '📡 Modo Local Offline'}
             </Text>
@@ -36,7 +44,10 @@ export const MapaScreen = () => {
               return (
                 <TouchableOpacity
                   key={rad.value}
-                  style={[styles.radBtn, active && styles.radBtnActive]}
+                  style={[
+                    styles.radBtn,
+                    active && (isCrisisRealActive ? styles.radBtnActiveCrisis : styles.radBtnActive),
+                  ]}
                   onPress={() => setProximityRadius(rad.value)}
                 >
                   <Text style={[styles.radBtnText, active && styles.radBtnTextActive]}>
@@ -48,43 +59,72 @@ export const MapaScreen = () => {
           </View>
         </View>
 
-        {/* Métricas rápidas de seguridad y recursos */}
-        <View style={styles.metricsRow}>
-          <View style={styles.metricItem}>
-            <Ionicons name="water" size={16} color="#0284c7" />
-            <Text style={styles.metricVal}>2</Text>
-            <Text style={styles.metricName}>Agua</Text>
+        {/* Métricas dinámicas según modo de la app */}
+        {isCrisisRealActive ? (
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Ionicons name="water" size={16} color="#0284c7" />
+              <Text style={styles.metricVal}>2</Text>
+              <Text style={styles.metricName}>Agua</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="shield-checkmark" size={16} color="#16a34a" />
+              <Text style={styles.metricVal}>1</Text>
+              <Text style={styles.metricName}>Refugio</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="medkit" size={16} color="#dc2626" />
+              <Text style={styles.metricVal}>1</Text>
+              <Text style={styles.metricName}>Auxilio</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="warning" size={16} color="#f59e0b" />
+              <Text style={styles.metricVal}>1</Text>
+              <Text style={styles.metricName}>Clúster IA</Text>
+            </View>
           </View>
-          <View style={styles.metricItem}>
-            <Ionicons name="shield-checkmark" size={16} color="#16a34a" />
-            <Text style={styles.metricVal}>1</Text>
-            <Text style={styles.metricName}>Refugio</Text>
+        ) : (
+          <View style={styles.metricsRow}>
+            <View style={styles.metricItem}>
+              <Ionicons name="construct" size={16} color="#2563eb" />
+              <Text style={styles.metricVal}>5</Text>
+              <Text style={styles.metricName}>Oficios</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="gift" size={16} color="#059669" />
+              <Text style={styles.metricVal}>3</Text>
+              <Text style={styles.metricName}>Favores</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="business" size={16} color="#d97706" />
+              <Text style={styles.metricVal}>1</Text>
+              <Text style={styles.metricName}>Comunal</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Ionicons name="star" size={16} color="#eab308" />
+              <Text style={styles.metricVal}>4.9</Text>
+              <Text style={styles.metricName}>V°B° Vecinal</Text>
+            </View>
           </View>
-          <View style={styles.metricItem}>
-            <Ionicons name="medkit" size={16} color="#dc2626" />
-            <Text style={styles.metricVal}>1</Text>
-            <Text style={styles.metricName}>Auxilio</Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Ionicons name="warning" size={16} color="#f59e0b" />
-            <Text style={styles.metricVal}>1</Text>
-            <Text style={styles.metricName}>Clúster IA</Text>
-          </View>
-        </View>
+        )}
       </View>
 
-      {/* Componente Central de Mapa Interactivo (Nativo en Móvil / OpenStreetMap en Web) */}
+      {/* Componente Central de Mapa Interactivo Evolutivo */}
       <View style={styles.mapWrapper}>
         <CrisisMap />
       </View>
 
-      {/* Nota de Resiliencia Offline */}
-      <View style={styles.infoBox}>
-        <MaterialCommunityIcons name="database-check" size={18} color="#0369a1" />
-        <Text style={styles.infoBoxText}>
+      {/* Nota Explicativa de Evolución */}
+      <View style={[styles.infoBox, isCrisisRealActive && styles.infoBoxCrisis]}>
+        <MaterialCommunityIcons
+          name={isCrisisRealActive ? 'alert-decagram' : 'sync'}
+          size={20}
+          color={isCrisisRealActive ? '#b91c1c' : '#0369a1'}
+        />
+        <Text style={[styles.infoBoxText, isCrisisRealActive && styles.infoBoxTextCrisis]}>
           {isCrisisRealActive
-            ? '⚠️ MODO CRISIS ACTIVO: Mostrando corredores de evacuación rápida y puntos críticos de asistencia.'
-            : '✅ Los datos de recursos y zonas seguras están respaldados en caché local (SQLite) para funcionar ante cortes de red eléctrica e internet.'}
+            ? '🚨 MODO CRISIS ACTIVO: El mapa ha evolucionado a vista táctica de rescate. Muestra zonas seguras, puntos de agua y clústeres de vulnerabilidad agrupados por el algoritmo de IA (DBSCAN).'
+            : '☀️ MODO DÍA A DÍA: Mapa enfocado en economía de proximidad (gasfiteros, electricistas) y favores compartidos. Si ocurre una emergencia o sismo, el mapa evoluciona instantáneamente.'}
         </Text>
       </View>
     </ScrollView>
@@ -105,13 +145,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     marginBottom: 14,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  headerCardCrisis: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff7f7',
   },
   titleRow: {
     flexDirection: 'row',
@@ -127,16 +171,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  iconCircleCrisis: {
+    backgroundColor: '#fee2e2',
+  },
   titleTextContainer: {
     flex: 1,
   },
   mainTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     color: '#0f172a',
   },
+  mainTitleCrisis: {
+    color: '#991b1b',
+  },
   subTitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748b',
     marginTop: 2,
     fontWeight: '600',
@@ -171,6 +221,10 @@ const styles = StyleSheet.create({
   radBtnActive: {
     backgroundColor: '#1d4ed8',
     borderColor: '#1d4ed8',
+  },
+  radBtnActiveCrisis: {
+    backgroundColor: '#b91c1c',
+    borderColor: '#b91c1c',
   },
   radBtnText: {
     fontSize: 10.5,
@@ -218,11 +272,18 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
+  infoBoxCrisis: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
   infoBoxText: {
     flex: 1,
     fontSize: 11,
     color: '#0369a1',
     lineHeight: 16,
     fontWeight: '600',
+  },
+  infoBoxTextCrisis: {
+    color: '#991b1b',
   },
 });

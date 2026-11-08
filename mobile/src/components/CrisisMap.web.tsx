@@ -2,64 +2,122 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CURRENT_USER } from '../mock/data';
+import { useApp } from '../context/AppContext';
 
-const MAP_ITEMS = [
-  { id: 'vulnerable-1', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Norte · Mz. A (Adulto Mayor)', latitude: -11.8671, longitude: -77.0761, icon: 'accessibility' },
-  { id: 'vulnerable-2', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Pinos · Mz. C (Movilidad Reducida)', latitude: -11.8667, longitude: -77.0748, icon: 'accessibility' },
-  { id: 'vulnerable-3', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Sector Sur · Mz. D (Oxígeno Dependiente)', latitude: -11.8680, longitude: -77.0755, icon: 'accessibility' },
-  { id: 'vulnerable-4', type: 'vulnerable', label: 'Persona vulnerable', detail: 'Calle Los Sauces · Mz. B (Madre Gestante)', latitude: -11.8675, longitude: -77.0765, icon: 'accessibility' },
-  { id: 'resource-1', type: 'resource', label: 'Punto de agua potable', detail: 'Parque Central (Tanque Comunal 5,000L)', latitude: -11.8670, longitude: -77.0742, icon: 'water' },
-  { id: 'resource-2', type: 'resource', label: 'Puesto primeros auxilios', detail: 'Local Comunal · Mz. B (Paramédico)', latitude: -11.8662, longitude: -77.0750, icon: 'medkit' },
-  { id: 'resource-3', type: 'resource', label: 'Zona segura y refugio', detail: 'Cancha deportiva vecinal techada', latitude: -11.8682, longitude: -77.0744, icon: 'shield-checkmark' },
-  { id: 'resource-4', type: 'resource', label: 'Punto de energía y carga', detail: 'Sector Norte (Generador Solar Comunal)', latitude: -11.8660, longitude: -77.0763, icon: 'flash' },
-  { id: 'resource-5', type: 'resource', label: 'Punto de agua', detail: 'Calle Los Sauces 310 (Vecino Don Mario)', latitude: -11.8674, longitude: -77.0770, icon: 'water' },
-  { id: 'cluster-1', type: 'cluster', label: 'Clúster IA (DBSCAN)', detail: 'Sector 2 · 5 reportes activos de Falta de Agua', latitude: -11.8675, longitude: -77.0754, icon: 'warning', count: 5 },
-  { id: 'cluster-2', type: 'cluster', label: 'Clúster de alertas', detail: 'Bloque Los Sauces · Gravedad alta', latitude: -11.8666, longitude: -77.0741, icon: 'warning', count: 3 },
+// Puntos georreferenciados para el DÍA A DÍA (Economía Local y Cadena de Favores)
+const COMMUNITY_ITEMS = [
+  { id: 'serv-1', type: 'servicio', label: 'Gasfitero: Don Pedro Sánchez', detail: 'Mz. A Lt. 4 · ⭐ 4.9 · Emergencias y tuberías', latitude: -11.8671, longitude: -77.0761, icon: 'construct' },
+  { id: 'serv-2', type: 'servicio', label: 'Cerrajería: Doña Rosa Quispe', detail: 'Calle Los Pinos 142 · ⭐ 5.0 · Copias y cerraduras', latitude: -11.8667, longitude: -77.0748, icon: 'key' },
+  { id: 'serv-3', type: 'servicio', label: 'Electricista: Carlos Méndez', detail: 'Sector Sur Mz. D · ⭐ 4.8 · Instalaciones y tableros', latitude: -11.8680, longitude: -77.0755, icon: 'flash' },
+  { id: 'serv-4', type: 'servicio', label: 'Clases y Apoyo: Lucía Alarcón', detail: 'Mz. C Lt. 8 · ⭐ 4.9 · Matemáticas y lectura escolar', latitude: -11.8675, longitude: -77.0765, icon: 'school' },
+  { id: 'serv-5', type: 'servicio', label: 'Paseador Canino: Marcos Peña', detail: 'Calle Los Sauces 310 · ⭐ 4.7 · Cuidado responsable', latitude: -11.8674, longitude: -77.0770, icon: 'paw' },
+  { id: 'favor-1', type: 'favor', label: 'Préstamo: Escalera Telescópica 6m', detail: 'Don Mario · Mz. B Lt. 12 · Préstamo gratis fin de semana', latitude: -11.8662, longitude: -77.0750, icon: 'gift' },
+  { id: 'favor-2', type: 'favor', label: 'Donación: Pintura blanca y cajas', detail: 'Elena Torres · Sector Norte · Material para vecinos', latitude: -11.8660, longitude: -77.0763, icon: 'cube' },
+  { id: 'favor-3', type: 'favor', label: 'Préstamo: Taladro Percutor', detail: 'Juan Pablo · Cancha Vecinal · Con juego de brocas', latitude: -11.8682, longitude: -77.0744, icon: 'build' },
+  { id: 'comun-1', type: 'comunidad', label: 'Local Comunal Las Palmeras', detail: 'Mz. B · Reuniones de Junta Vecinal y trámites', latitude: -11.8670, longitude: -77.0742, icon: 'business' },
 ] as const;
 
-type MapItem = (typeof MAP_ITEMS)[number];
-type MapFilter = 'all' | MapItem['type'];
+// Puntos georreferenciados para EMERGENCIAS / CRISIS
+const CRISIS_ITEMS = [
+  { id: 'resource-1', type: 'resource', label: 'Punto de agua potable', detail: 'Parque Central (Tanque Comunal 5,000L)', latitude: -11.8670, longitude: -77.0742, icon: 'water' },
+  { id: 'resource-2', type: 'resource', label: 'Puesto primeros auxilios', detail: 'Local Comunal · Mz. B (Paramédico de turno)', latitude: -11.8662, longitude: -77.0750, icon: 'medkit' },
+  { id: 'resource-3', type: 'resource', label: 'Zona segura y refugio', detail: 'Cancha deportiva vecinal techada sismorresistente', latitude: -11.8682, longitude: -77.0744, icon: 'shield-checkmark' },
+  { id: 'resource-4', type: 'resource', label: 'Punto de energía y carga', detail: 'Sector Norte (Generador Solar Comunal)', latitude: -11.8660, longitude: -77.0763, icon: 'flash' },
+  { id: 'resource-5', type: 'resource', label: 'Punto de agua', detail: 'Calle Los Sauces 310 (Grifo comunal)', latitude: -11.8674, longitude: -77.0770, icon: 'water' },
+  { id: 'cluster-1', type: 'cluster', label: 'Clúster IA (DBSCAN)', detail: 'Sector 2 · 5 reportes activos de Falta de Agua', latitude: -11.8675, longitude: -77.0754, icon: 'warning', count: 5 },
+  { id: 'cluster-2', type: 'cluster', label: 'Clúster de alertas', detail: 'Bloque Los Sauces · Gravedad alta', latitude: -11.8666, longitude: -77.0741, icon: 'warning', count: 3 },
+  { id: 'vulnerable-1', type: 'vulnerable', label: 'Persona vulnerable (Adulto Mayor)', detail: 'Sector Norte · Mz. A', latitude: -11.8671, longitude: -77.0761, icon: 'accessibility' },
+  { id: 'vulnerable-2', type: 'vulnerable', label: 'Persona vulnerable (Movilidad Reducida)', detail: 'Calle Los Pinos · Mz. C', latitude: -11.8667, longitude: -77.0748, icon: 'accessibility' },
+  { id: 'vulnerable-3', type: 'vulnerable', label: 'Persona vulnerable (Oxígeno Dependiente)', detail: 'Sector Sur · Mz. D', latitude: -11.8680, longitude: -77.0755, icon: 'accessibility' },
+  { id: 'vulnerable-4', type: 'vulnerable', label: 'Persona vulnerable (Madre Gestante)', detail: 'Calle Los Sauces · Mz. B', latitude: -11.8675, longitude: -77.0765, icon: 'accessibility' },
+] as const;
 
-const TYPE_COLORS: Record<MapItem['type'], string> = {
-  vulnerable: '#7c3aed',
+type CommunityItem = (typeof COMMUNITY_ITEMS)[number];
+type CrisisItem = (typeof CRISIS_ITEMS)[number];
+type AnyMapItem = CommunityItem | CrisisItem;
+
+const COMMUNITY_LABELS: Record<string, string> = {
+  servicio: 'Oficios y Servicios',
+  favor: 'Cadena de Favores',
+  comunidad: 'Puntos de Encuentro',
+};
+
+const CRISIS_LABELS: Record<string, string> = {
+  resource: 'Recursos Vitales',
+  cluster: 'Clústeres IA',
+  vulnerable: 'Vulnerables',
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  servicio: '#2563eb',
+  favor: '#059669',
+  comunidad: '#d97706',
   resource: '#0284c7',
   cluster: '#dc2626',
+  vulnerable: '#7c3aed',
 };
 
 export const CrisisMap = () => {
-  const [activeFilter, setActiveFilter] = useState<MapFilter>('all');
-  const [selectedItem, setSelectedItem] = useState<MapItem | null>(null);
+  const { isCrisisRealActive, toggleCrisisRealMode } = useApp();
+  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [selectedItem, setSelectedItem] = useState<AnyMapItem | null>(null);
 
   const canViewVulnerableLocations = CURRENT_USER.role === 'Junta Vecinal';
 
-  const availableFilters: { type: MapFilter; label: string; count?: number }[] = [
+  const currentItems = isCrisisRealActive ? CRISIS_ITEMS : COMMUNITY_ITEMS;
+  const currentLabels = isCrisisRealActive ? CRISIS_LABELS : COMMUNITY_LABELS;
+
+  const availableFilters: { type: string; label: string; count?: number }[] = [
     { type: 'all', label: 'Todos' },
-    { type: 'vulnerable', label: 'Vulnerables', count: MAP_ITEMS.filter((item) => item.type === 'vulnerable').length },
-    { type: 'resource', label: 'Recursos', count: MAP_ITEMS.filter((item) => item.type === 'resource').length },
-    { type: 'cluster', label: 'SOS / Clúster', count: MAP_ITEMS.filter((item) => item.type === 'cluster').length },
+    ...Object.keys(currentLabels).map((t) => ({
+      type: t,
+      label: currentLabels[t],
+      count: (currentItems as readonly AnyMapItem[]).filter((i) => i.type === t).length,
+    })),
   ];
 
-  const filters = availableFilters.filter((filter) =>
-    canViewVulnerableLocations || filter.type !== 'vulnerable'
+  const filters = availableFilters.filter(
+    (f) => canViewVulnerableLocations || f.type !== 'vulnerable'
   );
 
-  const visibleItems = MAP_ITEMS.filter((item) =>
-    (canViewVulnerableLocations || item.type !== 'vulnerable') &&
-    (activeFilter === 'all' || item.type === activeFilter)
+  const visibleItems = (currentItems as readonly AnyMapItem[]).filter(
+    (item) =>
+      (canViewVulnerableLocations || item.type !== 'vulnerable') &&
+      (activeFilter === 'all' || item.type === activeFilter)
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isCrisisRealActive && styles.containerCrisis]}>
+      {/* Encabezado */}
       <View style={styles.header}>
-        <View style={styles.headerIcon}>
-          <Ionicons name="map" size={17} color="#1d4ed8" />
+        <View style={[styles.headerIcon, isCrisisRealActive && styles.headerIconCrisis]}>
+          <Ionicons
+            name={isCrisisRealActive ? 'warning' : 'map'}
+            size={18}
+            color={isCrisisRealActive ? '#dc2626' : '#1d4ed8'}
+          />
         </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Mapa de Recursos y Zonas Críticas (Web Interactivo)</Text>
+          <Text style={[styles.title, isCrisisRealActive && styles.titleCrisis]}>
+            {isCrisisRealActive
+              ? 'Mapa Táctico de Emergencia (Web Interactivo)'
+              : 'Mapa Comunitario · Economía y Solidaridad (Web)'}
+          </Text>
           <Text style={styles.subtitle}>
-            Urb. Las Palmeras · {canViewVulnerableLocations ? 'Vista Junta Vecinal' : 'Vista Vecinal Agregada'}
+            Urb. Las Palmeras · {isCrisisRealActive ? 'Vista Táctica de Rescate' : 'Oficios locales y favores activos'}
           </Text>
         </View>
+
+        {/* Switch Demostrativo */}
+        <TouchableOpacity
+          style={[styles.evolveBtn, isCrisisRealActive && styles.evolveBtnCrisis]}
+          onPress={toggleCrisisRealMode}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.evolveBtnText, isCrisisRealActive && styles.evolveBtnTextCrisis]}>
+            {isCrisisRealActive ? '☀️ Ver Normal' : '🚨 Simular SOS'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filtros */}
@@ -69,7 +127,10 @@ export const CrisisMap = () => {
           return (
             <TouchableOpacity
               key={filter.type}
-              style={[styles.filterChip, isActive && styles.filterChipActive]}
+              style={[
+                styles.filterChip,
+                isActive && (isCrisisRealActive ? styles.filterChipActiveCrisis : styles.filterChipActiveNormal),
+              ]}
               onPress={() => {
                 setActiveFilter(filter.type);
                 if (selectedItem && filter.type !== 'all' && selectedItem.type !== filter.type) {
@@ -78,7 +139,12 @@ export const CrisisMap = () => {
               }}
               activeOpacity={0.8}
             >
-              <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+              <Text
+                style={[
+                  styles.filterText,
+                  isActive && styles.filterTextActive,
+                ]}
+              >
                 {filter.label}{filter.count ? ` (${filter.count})` : ''}
               </Text>
             </TouchableOpacity>
@@ -86,27 +152,28 @@ export const CrisisMap = () => {
         })}
       </ScrollView>
 
-      {/* Mapa Visual con OpenStreetMap Interactivo */}
+      {/* Mapa OpenStreetMap Embed */}
       <View style={styles.mapFrame}>
         <iframe
           title="OpenStreetMap Urb Las Palmeras"
           width="100%"
           height="100%"
-          frameBorder="0"
-          scrolling="no"
-          marginHeight={0}
-          marginWidth={0}
-          src="https://www.openstreetmap.org/export/embed.html?bbox=-77.0820%2C-11.8720%2C-77.0680%2C-11.8620&amp;layer=mapnik&amp;marker=-11.8675%2C-77.0754"
-          style={{ border: 0, width: '100%', height: '100%' }}
+          style={{ border: 0 }}
+          loading="lazy"
+          src="https://www.openstreetmap.org/export/embed.html?bbox=-77.0850%2C-11.8750%2C-77.0650%2C-11.8600&layer=mapnik&marker=-11.8675%2C-77.0754"
         />
-        <View style={styles.mapBadge}>
-          <View style={styles.liveDot} />
-          <Text style={styles.mapBadgeText}>GPS: -11.8675, -77.0754 (Urb. Las Palmeras)</Text>
+        <View pointerEvents="none" style={styles.mapBadge}>
+          <View style={[styles.liveDot, isCrisisRealActive ? styles.dotCrisis : styles.dotNormal]} />
+          <Text style={styles.mapBadgeText}>
+            {isCrisisRealActive ? '🚨 MODO CRISIS POSTGIS' : '📍 LIMA NORTE - POSTGIS'}
+          </Text>
         </View>
       </View>
 
-      {/* Lista de Puntos y Marcadores Interactivos */}
-      <Text style={styles.pointsTitle}>Puntos Activos ({visibleItems.length}):</Text>
+      {/* Lista Horizontal de Puntos Interactivos */}
+      <Text style={styles.pointsTitle}>
+        {isCrisisRealActive ? '🚨 Puntos Tácticos de Emergencia:' : '📍 Oficios y Recursos en el Barrio:'}
+      </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pointsScroll}>
         {visibleItems.map((item) => {
           const isSelected = selectedItem?.id === item.id;
@@ -117,8 +184,8 @@ export const CrisisMap = () => {
               onPress={() => setSelectedItem(item)}
               activeOpacity={0.8}
             >
-              <View style={[styles.pointIconBg, { backgroundColor: TYPE_COLORS[item.type] }]}>
-                <Ionicons name={item.icon as any} size={15} color="#ffffff" />
+              <View style={[styles.pointIconBg, { backgroundColor: TYPE_COLORS[item.type] || '#2563eb' }]}>
+                <Ionicons name={item.icon as any} size={14} color="#ffffff" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.pointLabel} numberOfLines={1}>{item.label}</Text>
@@ -132,7 +199,7 @@ export const CrisisMap = () => {
       {/* Detalle Seleccionado */}
       {selectedItem && (
         <View style={styles.selectedBox}>
-          <View style={[styles.selectedIcon, { backgroundColor: TYPE_COLORS[selectedItem.type] }]}>
+          <View style={[styles.selectedIcon, { backgroundColor: TYPE_COLORS[selectedItem.type] || '#2563eb' }]}>
             <Ionicons name={selectedItem.icon as any} size={18} color="#ffffff" />
           </View>
           <View style={{ flex: 1 }}>
@@ -155,10 +222,13 @@ const styles = StyleSheet.create({
   container: {
     padding: 12,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
     backgroundColor: '#ffffff',
-    marginTop: 10,
+  },
+  containerCrisis: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fff5f5',
   },
   header: {
     flexDirection: 'row',
@@ -167,12 +237,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   headerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#eff6ff',
+  },
+  headerIconCrisis: {
+    backgroundColor: '#fee2e2',
   },
   headerText: {
     flex: 1,
@@ -182,11 +255,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
+  titleCrisis: {
+    color: '#991b1b',
+  },
   subtitle: {
     color: '#64748b',
-    fontSize: 10.5,
+    fontSize: 10,
     fontWeight: '600',
     marginTop: 2,
+  },
+  evolveBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+  },
+  evolveBtnCrisis: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#bfdbfe',
+  },
+  evolveBtnText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#b91c1c',
+  },
+  evolveBtnTextCrisis: {
+    color: '#1d4ed8',
   },
   filters: {
     gap: 6,
@@ -200,9 +296,13 @@ const styles = StyleSheet.create({
     borderColor: '#dbe3ec',
     backgroundColor: '#f8fafc',
   },
-  filterChipActive: {
-    borderColor: '#0f172a',
-    backgroundColor: '#0f172a',
+  filterChipActiveNormal: {
+    borderColor: '#1d4ed8',
+    backgroundColor: '#1d4ed8',
+  },
+  filterChipActiveCrisis: {
+    borderColor: '#b91c1c',
+    backgroundColor: '#b91c1c',
   },
   filterText: {
     color: '#334155',
@@ -213,7 +313,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   mapFrame: {
-    height: 260,
+    height: 250,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
@@ -238,7 +338,12 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#16a34a',
+  },
+  dotNormal: {
+    backgroundColor: '#2563eb',
+  },
+  dotCrisis: {
+    backgroundColor: '#dc2626',
   },
   mapBadgeText: {
     fontSize: 9,
@@ -266,7 +371,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginRight: 8,
-    maxWidth: 200,
+    maxWidth: 220,
   },
   pointCardActive: {
     borderColor: '#1d4ed8',
