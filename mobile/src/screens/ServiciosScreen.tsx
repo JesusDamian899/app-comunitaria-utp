@@ -70,7 +70,6 @@ export const ServiciosScreen = () => {
   // Estados de WhatsApp contactado por proveedor
   const [contactedMap, setContactedMap] = useState<Record<string, boolean>>({});
   const [ratedMap, setRatedMap] = useState<Record<string, boolean>>({});
-  const [newColegiatura, setNewColegiatura] = useState('');
 
   // Modal Recomendar con PIN
   const [recommendingProvider, setRecommendingProvider] = useState<ServiceProvider | null>(null);
@@ -82,9 +81,12 @@ export const ServiciosScreen = () => {
   // Modal Registrar Servicio
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newTarifa, setNewTarifa] = useState('');
+  const [newTarifa, setNewTarifa] = useState('30');
   const [newTipo, setNewTipo] = useState<'oficio' | 'profesion'>('oficio');
+  const [newCategory, setNewCategory] = useState<ServiceCategoryType>('mantenimiento_hogar');
+  const [newColegiatura, setNewColegiatura] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newPhone, setNewPhone] = useState(currentUser.phone || '');
 
   // Modal Editar Servicio (CRUD)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -333,13 +335,14 @@ export const ServiciosScreen = () => {
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
       recommendationsCount: currentUser.vistosBuenos ?? 0,
       specialtyDetails: `${newDesc.trim() || newTitle.trim()} • Tarifa vecinal: S/. ${tarifaNum || 30}`,
-      category: selectedCategory === 'todos' ? 'mantenimiento_hogar' : selectedCategory,
+      category: newCategory,
       tipoActividad: newTipo,
       colegiatura: newTipo === 'profesion' ? newColegiatura.trim() : undefined,
       verified: newTipo === 'profesion' || (currentUser.vistosBuenos ?? 0) >= 5,
       servicePin: currentUser.servicePin || '4826',
       reviews: [],
-      phone: currentUser.phone,
+      phone: newPhone.trim() || currentUser.phone,
+      tarifa: tarifaNum || 30,
     };
 
     setProviders((prev) => [nuevoServicio, ...prev]);
@@ -365,12 +368,13 @@ export const ServiciosScreen = () => {
       }).then(() => {});
     }
 
-    showToast(`✓ Servicio publicado en Supabase con tu PIN ${nuevoServicio.servicePin}`);
+    showToast(`✓ Servicio publicado exitosamente con tu PIN ${nuevoServicio.servicePin}`);
     setIsCreateModalOpen(false);
     setNewTitle('');
-    setNewTarifa('');
+    setNewTarifa('30');
     setNewDesc('');
     setNewColegiatura('');
+    setNewPhone(currentUser.phone || '');
   };
 
   const handleOpenEdit = (service: ServiceProvider) => {
@@ -610,6 +614,7 @@ export const ServiciosScreen = () => {
         const isTopTrust = provider.recommendationsCount >= 15;
         const isMidTrust = provider.recommendationsCount >= 5 && provider.recommendationsCount < 15;
         const hasContacted = contactedMap[provider.id];
+        const firstName = provider.name.split(' ')[0] || provider.name;
         const isOwner =
           provider.ownerId === currentUser.id ||
           provider.name === currentUser.name ||
@@ -707,198 +712,317 @@ export const ServiciosScreen = () => {
               <Text style={styles.specialtyText}>{provider.specialtyDetails}</Text>
             </View>
 
-            {/* Botón WhatsApp -> Ingresar PIN -> Servicio Calificado */}
+            {/* Acciones WhatsApp y Validación con PIN */}
             <View style={styles.actionContainer}>
               {ratedMap[provider.id] && !hasContacted ? (
                 <View style={styles.contactedContainer}>
-                  <View style={styles.ratedSuccessBadge}>
+                  <View style={styles.ratedSuccessBox}>
                     <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
                     <Text style={styles.ratedSuccessText}>
-                      ✓ Servicio calificado con PIN de 4 dígitos
+                      ✓ Servicio Validado y Calificado
                     </Text>
                   </View>
+                  <TouchableOpacity
+                    onPress={() => handleOpenWhatsapp(provider)}
+                    style={styles.recontactLink}
+                  >
+                    <Text style={styles.recontactLinkText}>
+                      ¿Solicitar un nuevo servicio por WhatsApp a {firstName}?
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-              ) : hasContacted ? (
-                <View style={styles.contactedContainer}>
-                  <View style={styles.contactedButtonsRow}>
-                    <TouchableOpacity
-                      style={styles.btnWhatsappSmall}
-                      onPress={() => handleOpenWhatsapp(provider)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="logo-whatsapp" size={16} color="#ffffff" />
-                      <Text style={styles.btnWhatsappText}>WhatsApp</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.btnPinAction}
-                      onPress={() => {
-                        setRecommendingProvider(provider);
-                        setInputPin('');
-                        setPinVerified(false);
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="key" size={15} color="#ffffff" />
-                      <Text style={styles.btnPinText}>Ingresar PIN y Calificar</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : (
+              ) : !hasContacted ? (
                 <TouchableOpacity
-                  style={[styles.btnWhatsappPrimary, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
+                  style={[styles.whatsappButton, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
                   onPress={() => handleOpenWhatsapp(provider)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name={isCrisisRealActive ? "call" : "logo-whatsapp"} size={17} color="#ffffff" />
-                  <Text style={styles.btnWhatsappPrimaryText}>
-                    {isCrisisRealActive ? 'Solicitar Soporte de Emergencia' : 'Contactar por WhatsApp'}
+                  <FontAwesome5 name="whatsapp" size={18} color="#ffffff" />
+                  <Text style={styles.whatsappButtonText}>
+                    {isCrisisRealActive ? 'Solicitar Soporte de Emergencia' : `Chat WhatsApp con ${firstName}`}
                   </Text>
                 </TouchableOpacity>
+              ) : (
+                <View style={styles.contactedContainer}>
+                  <TouchableOpacity
+                    style={styles.recommendPinButton}
+                    onPress={() => {
+                      setRecommendingProvider(provider);
+                      setInputPin('');
+                      setPinVerified(false);
+                      setThumbsRating(null);
+                      setSelectedComment('');
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="key" size={16} color="#854d0e" />
+                    <Text style={styles.recommendPinButtonText}>
+                      ¿Recomiendas el servicio? (Ingresar PIN)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleOpenWhatsapp(provider)}
+                    style={styles.recontactLink}
+                  >
+                    <Text style={styles.recontactLinkText}>
+                      ¿Escribir nuevamente por WhatsApp a {firstName}?
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           </View>
         );
       })}
 
-      {/* Modal Recomendar con PIN de 4 Dígitos */}
+      {/* Modal Recomendar con PIN */}
       <Modal visible={recommendingProvider !== null} animationType="fade" transparent>
-        <View style={styles.pinModalOverlay}>
-          <View style={styles.pinModalCard}>
-            <View style={styles.pinModalHeader}>
-              <Text style={styles.pinModalTitle}>Validación con PIN de 4 Dígitos</Text>
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCardLarge}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                Recomendar a {recommendingProvider?.name}
+              </Text>
               <TouchableOpacity onPress={() => setRecommendingProvider(null)}>
-                <Ionicons name="close" size={20} color="#64748b" />
+                <Ionicons name="close" size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.pinModalDesc}>
-              Para evitar recomendaciones falsas, solicita a{' '}
-              <Text style={{ fontWeight: '800' }}>{recommendingProvider?.name}</Text> su PIN de servicios:
-            </Text>
-
             {!pinVerified ? (
-              <View style={styles.pinInputContainer}>
+              <View style={{ paddingVertical: 8 }}>
+                <Text style={styles.pinInstructions}>
+                  Ingresa el PIN de 4 dígitos que el vecino te compartió para validar el trabajo realizado:
+                </Text>
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="Ej: 3150"
+                  placeholder={`Ej: ${recommendingProvider?.servicePin || '3150'}`}
                   placeholderTextColor="#94a3b8"
-                  value={inputPin}
-                  onChangeText={setInputPin}
                   keyboardType="numeric"
                   maxLength={4}
+                  value={inputPin}
+                  onChangeText={setInputPin}
+                  autoFocus
                 />
-                <TouchableOpacity style={styles.verifyPinBtn} onPress={handleVerifyPin}>
-                  <Text style={styles.verifyPinBtnText}>Validar PIN</Text>
+                <TouchableOpacity style={styles.verifyPinButton} onPress={handleVerifyPin} activeOpacity={0.85}>
+                  <Text style={styles.verifyPinButtonText}>Validar PIN</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.ratingSection}>
-                <View style={styles.pinVerifiedBanner}>
-                  <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                  <Text style={styles.pinVerifiedText}>PIN validado con éxito</Text>
-                </View>
-
-                <Text style={styles.ratingTitle}>¿Recomiendas este servicio a tus vecinos?</Text>
+              <View style={{ paddingVertical: 8 }}>
+                <Text style={styles.pinInstructions}>
+                  ¿Cómo calificarías el servicio prestado?
+                </Text>
                 <View style={styles.thumbsRow}>
                   <TouchableOpacity
-                    style={[styles.thumbBtn, thumbsRating === 'up' && styles.thumbBtnUp]}
+                    style={[styles.thumbButton, thumbsRating === 'up' && styles.thumbButtonActiveGreen]}
                     onPress={() => setThumbsRating('up')}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="thumbs-up" size={22} color={thumbsRating === 'up' ? '#ffffff' : '#15803d'} />
-                    <Text style={[styles.thumbBtnText, thumbsRating === 'up' && { color: '#ffffff' }]}>Recomiendo</Text>
+                    <FontAwesome5 name="thumbs-up" size={22} color={thumbsRating === 'up' ? '#166534' : '#16a34a'} />
+                    <Text style={[styles.thumbText, thumbsRating === 'up' && styles.thumbTextGreen]}>Recomiendo 👍</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.thumbBtn, thumbsRating === 'down' && styles.thumbBtnDown]}
+                    style={[styles.thumbButton, thumbsRating === 'down' && styles.thumbButtonActiveRed]}
                     onPress={() => setThumbsRating('down')}
+                    activeOpacity={0.8}
                   >
-                    <Ionicons name="thumbs-down" size={22} color={thumbsRating === 'down' ? '#ffffff' : '#dc2626'} />
-                    <Text style={[styles.thumbBtnText, thumbsRating === 'down' && { color: '#ffffff' }]}>No Recomiendo</Text>
+                    <FontAwesome5 name="thumbs-down" size={22} color={thumbsRating === 'down' ? '#991b1b' : '#dc2626'} />
+                    <Text style={[styles.thumbText, thumbsRating === 'down' && styles.thumbTextRed]}>No recomiendo 👎</Text>
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.submitRatingBtn} onPress={handleSubmitRecommendation}>
-                  <Text style={styles.submitRatingBtnText}>Guardar Calificación</Text>
+                {/* Comentarios predeterminados */}
+                {thumbsRating === 'up' && (
+                  <View style={styles.presetCommentsBox}>
+                    {['Puntual y muy ordenado', 'Solucionó el problema rápido', 'Tarifa justa y buen trato'].map((c, i) => (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.presetCommentChip, selectedComment === c && styles.presetCommentChipActive]}
+                        onPress={() => setSelectedComment(c)}
+                      >
+                        <Text style={[styles.presetCommentText, selectedComment === c && styles.presetCommentTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {thumbsRating === 'down' && (
+                  <View style={styles.presetCommentsBox}>
+                    {['Llegó tarde a la cita', 'El trabajo no quedó solucionado', 'Cobró más de lo acordado'].map((c, i) => (
+                      <TouchableOpacity
+                        key={i}
+                        style={[styles.presetCommentChip, selectedComment === c && styles.presetCommentChipActive]}
+                        onPress={() => setSelectedComment(c)}
+                      >
+                        <Text style={[styles.presetCommentText, selectedComment === c && styles.presetCommentTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <TouchableOpacity style={styles.submitVoteButton} onPress={handleSubmitRecommendation} activeOpacity={0.85}>
+                  <Text style={styles.submitVoteButtonText}>Enviar Calificación Vecinal</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Modal Registrar Servicio con Plantillas Rápidas (2 Clics) */}
-      <Modal visible={isCreateModalOpen} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          style={styles.pinModalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      {/* Modal Registrar Servicio (Misma estructura visual que Editar y que crud_finalSOS) */}
+      <Modal visible={isCreateModalOpen} transparent animationType="slide">
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+          style={styles.modalOverlay}
         >
-          <View style={styles.createModalCard}>
-            <View style={styles.pinModalHeader}>
-              <Text style={styles.pinModalTitle}>
-                {isCrisisRealActive ? 'Registrar Brigada de Emergencia' : 'Publicar mi Servicio'}
-              </Text>
+          <View style={styles.modalCardLarge}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ backgroundColor: '#eff6ff', padding: 6, borderRadius: 8 }}>
+                  <Ionicons name="add-circle" size={18} color="#2563eb" />
+                </View>
+                <Text style={styles.modalTitle}>Registrar mi Servicio Vecinal</Text>
+              </View>
               <TouchableOpacity onPress={() => setIsCreateModalOpen(false)}>
-                <Ionicons name="close" size={20} color="#64748b" />
+                <Ionicons name="close" size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {/* Plantillas Rápidas (1 Clic) */}
-              <Text style={styles.presetSectionLabel}>⚡ Plantillas Rápidas (1 toque):</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.presetScroll}>
-                {SERVICE_PRESETS.map((p, idx) => (
-                  <TouchableOpacity
-                    key={idx}
-                    style={styles.presetChip}
-                    onPress={() => applyPreset(p)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.presetChipText}>{p.label}</Text>
-                  </TouchableOpacity>
-                ))}
+            <ScrollView
+              style={styles.modalBodyScroll}
+              contentContainerStyle={{ paddingBottom: 28 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.inputLabel}>1. Tipo de Actividad</Text>
+              <View style={styles.tipoRow}>
+                <TouchableOpacity
+                  style={[styles.tipoButton, newTipo === 'oficio' && styles.tipoButtonActive]}
+                  onPress={() => setNewTipo('oficio')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipoButtonText, newTipo === 'oficio' && styles.tipoButtonTextActive]}>
+                    Oficio (Por Vistos Buenos)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.tipoButton, newTipo === 'profesion' && styles.tipoButtonActive]}
+                  onPress={() => setNewTipo('profesion')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.tipoButtonText, newTipo === 'profesion' && styles.tipoButtonTextActive]}>
+                    Profesión (Acreditada)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {newTipo === 'profesion' && (
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.inputLabel}>N° de Colegiatura Profesional *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ej: CEP #48291, CIP #102938, CAL #71204"
+                    placeholderTextColor="#94a3b8"
+                    value={newColegiatura}
+                    onChangeText={setNewColegiatura}
+                  />
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>2. Categoría del Servicio</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {CATEGORIES_NORMAL.filter((c) => c.id !== 'todos').map((cat) => {
+                  const isCatSelected = newCategory === cat.id;
+                  return (
+                    <TouchableOpacity
+                      key={cat.id}
+                      style={[
+                        styles.categoryChip,
+                        isCatSelected && styles.categoryChipActive,
+                        { marginRight: 8 },
+                      ]}
+                      onPress={() => setNewCategory(cat.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryChipText,
+                          isCatSelected && styles.categoryChipTextActive,
+                        ]}
+                      >
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Especialidad u oficio *</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Ej: Plomero, Electricista, Enfermera..."
-                  placeholderTextColor="#94a3b8"
-                  value={newTitle}
-                  onChangeText={setNewTitle}
-                />
+              <Text style={styles.inputLabel}>3. Especialidad o Título</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: Electricista domiciliario, Cuidado geriátrico, Plomero..."
+                placeholderTextColor="#94a3b8"
+                value={newTitle}
+                onChangeText={setNewTitle}
+              />
+
+              <Text style={styles.inputLabel}>4. Tarifa Vecinal (Máx: S/. 100)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: 45"
+                keyboardType="numeric"
+                value={newTarifa}
+                onChangeText={setNewTarifa}
+              />
+
+              <Text style={styles.inputLabel}>5. Detalles y Cobertura</Text>
+              <TextInput
+                style={[styles.textInput, { height: 70, textAlignVertical: 'top' }]}
+                multiline
+                placeholder="Describe tu disponibilidad, herramientas y experiencia en la urbanización..."
+                placeholderTextColor="#94a3b8"
+                value={newDesc}
+                onChangeText={setNewDesc}
+              />
+
+              <Text style={styles.inputLabel}>6. Teléfono de Contacto (WhatsApp)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Ej: 999 888 777"
+                keyboardType="phone-pad"
+                value={newPhone}
+                onChangeText={setNewPhone}
+              />
+
+              <View style={styles.adminReviewNotice}>
+                <Text style={styles.adminReviewNoticeText}>
+                  ℹ️ Al registrar tu servicio, quedará disponible en el directorio vecinal con tu PIN de validación.
+                </Text>
               </View>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Tarifa referencial (Máx. S/. 100)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  placeholder="Ej: 30"
-                  placeholderTextColor="#94a3b8"
-                  keyboardType="numeric"
-                  value={newTarifa}
-                  onChangeText={setNewTarifa}
-                />
-              </View>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.createServiceButton, { flex: 1, backgroundColor: '#f1f5f9' }]}
+                  onPress={() => setIsCreateModalOpen(false)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.createServiceButtonText, { color: '#475569' }]}>Cancelar</Text>
+                </TouchableOpacity>
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Detalles de atención vecinal</Text>
-                <TextInput
-                  style={[styles.modalInput, styles.modalTextArea]}
-                  placeholder="Explica qué problemas solucionas en la urbanización..."
-                  placeholderTextColor="#94a3b8"
-                  value={newDesc}
-                  onChangeText={setNewDesc}
-                  multiline
-                  numberOfLines={3}
-                />
+                <TouchableOpacity
+                  style={[styles.createServiceButton, { flex: 2 }]}
+                  onPress={handleCreateService}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.createServiceButtonText}>Publicar mi Servicio</Text>
+                </TouchableOpacity>
               </View>
-
-              <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleCreateService} activeOpacity={0.85}>
-                <Ionicons name="checkmark-circle" size={18} color="#ffffff" />
-                <Text style={styles.modalSubmitText}>Publicar Servicio en Supabase (2 clics)</Text>
-              </TouchableOpacity>
+              <View style={{ height: 20 }} />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -923,7 +1047,12 @@ export const ServiciosScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.modalBodyScroll}
+              contentContainerStyle={{ paddingBottom: 28 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.inputLabel}>1. Tipo de Actividad</Text>
               <View style={styles.tipoRow}>
                 <TouchableOpacity
@@ -1430,18 +1559,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pinInput: {
-    flex: 1,
     backgroundColor: '#f8fafc',
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#cbd5e1',
     borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    fontSize: 22,
     fontWeight: '900',
     textAlign: 'center',
-    letterSpacing: 4,
+    letterSpacing: 6,
     color: '#0f172a',
+    marginBottom: 12,
   },
   verifyPinBtn: {
     backgroundColor: '#1d4ed8',
@@ -1684,6 +1813,7 @@ const styles = StyleSheet.create({
   },
   modalBodyScroll: {
     maxHeight: 520,
+    flexShrink: 1,
   },
   tipoRow: {
     flexDirection: 'row',
@@ -1735,5 +1865,153 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '800',
+  },
+  whatsappButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  whatsappButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  recommendPinButton: {
+    backgroundColor: '#fef08a',
+    borderWidth: 1.5,
+    borderColor: '#facc15',
+    borderRadius: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  recommendPinButtonText: {
+    color: '#854d0e',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ratedSuccessBox: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  pinInstructions: {
+    fontSize: 12,
+    color: '#475569',
+    lineHeight: 17,
+    marginBottom: 10,
+  },
+  verifyPinButton: {
+    backgroundColor: '#1d4ed8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  verifyPinButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  thumbButton: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    gap: 6,
+  },
+  thumbButtonActiveGreen: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  thumbButtonActiveRed: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  thumbText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  thumbTextGreen: {
+    color: '#166534',
+  },
+  thumbTextRed: {
+    color: '#991b1b',
+  },
+  recontactLink: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  recontactLinkText: {
+    color: '#16a34a',
+    fontSize: 11,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  presetCommentsBox: {
+    gap: 6,
+    marginVertical: 4,
+  },
+  presetCommentChip: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  presetCommentChipActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+  },
+  presetCommentText: {
+    fontSize: 11,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  presetCommentTextActive: {
+    color: '#1d4ed8',
+    fontWeight: '800',
+  },
+  submitVoteButton: {
+    backgroundColor: '#1d4ed8',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  submitVoteButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  adminReviewNotice: {
+    backgroundColor: '#fef3c7',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  adminReviewNoticeText: {
+    fontSize: 11,
+    color: '#92400e',
+    fontWeight: '600',
+    lineHeight: 15,
   },
 });

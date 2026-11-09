@@ -242,41 +242,12 @@ export const AuthScreen = ({ onDemoLogin, onAuthenticated }: AuthScreenProps) =>
                   onChangeText={setTelefono}
                 />
 
-                <Text style={styles.label}>Rol en la Comunidad</Text>
-                <View style={styles.roleRow}>
-                  <TouchableOpacity
-                    style={[
-                      styles.roleChip,
-                      rol === 'Vecino Residente' && styles.roleChipActive,
-                    ]}
-                    onPress={() => setRol('Vecino Residente')}
-                  >
-                    <Text
-                      style={[
-                        styles.roleChipText,
-                        rol === 'Vecino Residente' && styles.roleChipTextActive,
-                      ]}
-                    >
-                      Vecino Base
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.roleChip,
-                      rol === 'Junta Vecinal' && styles.roleChipActive,
-                    ]}
-                    onPress={() => setRol('Junta Vecinal')}
-                  >
-                    <Text
-                      style={[
-                        styles.roleChipText,
-                        rol === 'Junta Vecinal' && styles.roleChipTextActive,
-                      ]}
-                    >
-                      Junta Vecinal
-                    </Text>
-                  </TouchableOpacity>
+                {/* Blindaje de Rol: las cuentas inician como Vecino Residente */}
+                <View style={styles.roleInfoBox}>
+                  <Ionicons name="shield-checkmark" size={16} color="#1d4ed8" />
+                  <Text style={styles.roleInfoText}>
+                    Tu cuenta inicia como <Text style={{ fontWeight: '800' }}>Vecino Residente</Text>. Los permisos de Junta Vecinal los asigna un administrador.
+                  </Text>
                 </View>
               </>
             )}
@@ -534,5 +505,22 @@ const styles = StyleSheet.create({
     color: '#047857',
     fontSize: 11,
     fontWeight: '600',
+  },
+  roleInfoBox: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  roleInfoText: {
+    color: '#1e3a8a',
+    fontSize: 11,
+    flex: 1,
+    lineHeight: 15,
   },
 });

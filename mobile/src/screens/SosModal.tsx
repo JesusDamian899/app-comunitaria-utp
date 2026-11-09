@@ -24,12 +24,13 @@ import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../components/AuthGuard';
 
 const INCIDENT_OPTIONS = [
-  { type: 'caida', label: 'Me caí / Lesión', icon: 'walk-outline' as const },
-  { type: 'atrapado', label: 'Estoy atrapada/o', icon: 'hand-left-outline' as const },
-  { type: 'fuga_agua', label: 'Fuga o rotura', icon: 'water-outline' as const },
-  { type: 'seguridad', label: 'Sospechoso / Robo', icon: 'shield-outline' as const },
-  { type: 'otra', label: 'Otra urgencia', icon: 'alert-circle-outline' as const },
-];
+  { type: 'fall', label: 'Me caí', icon: 'walk-outline' as const },
+  { type: 'trapped', label: 'Estoy atrapada/o', icon: 'hand-left-outline' as const },
+  { type: 'accident', label: 'Sufrí un accidente', icon: 'car-outline' as const },
+  { type: 'other', label: 'Otra emergencia', icon: 'alert-circle-outline' as const },
+] as const;
+
+type IncidentType = (typeof INCIDENT_OPTIONS)[number]['type'];
 
 export const SosModal = () => {
   const { 
@@ -46,10 +47,11 @@ export const SosModal = () => {
   const { currentUser } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const [selectedIncident, setSelectedIncident] = useState<string>('caida');
+  const [selectedIncident, setSelectedIncident] = useState<IncidentType | null>('fall');
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const { isLoading: isLocationLoading, requestLocation } = useGeolocation();
-  const { saveToOfflineQueue } = useOfflineSync();
+  const { saveToOfflineQueue, removeFromOfflineQueue } = useOfflineSync();
 
   const handleCall = (phone: string, name: string) => {
     const cleanPhone = phone.replace(/\s+/g, '');
@@ -62,8 +64,18 @@ export const SosModal = () => {
     if (isSubmitting) return;
 
     if (isSosAlertSent) {
+      if (activeReportId && removeFromOfflineQueue) {
+        await removeFromOfflineQueue(activeReportId);
+      }
       toggleSosAlert();
       setUserSafetyStatus('none');
+      setActiveReportId(null);
+      showToast('Alerta cancelada correctamente.');
+      return;
+    }
+
+    if (!selectedIncident) {
+      showToast('Selecciona qué pasó para enviar la alerta.');
       return;
     }
 
@@ -78,10 +90,11 @@ export const SosModal = () => {
 
       const incidentObj = INCIDENT_OPTIONS.find((i) => i.type === selectedIncident);
       const incidentLabel = incidentObj ? incidentObj.label : 'Urgencia vecinal';
+      const reportId = `rescue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       // 2. Guardar SIEMPRE en SQLite local para resiliencia offline garantizada
       await saveToOfflineQueue({
-        id: `sos-${Date.now()}`,
+        id: reportId,
         type: 'RESCUE',
         incident: incidentLabel,
         author: currentUser.name,
@@ -101,11 +114,12 @@ export const SosModal = () => {
         });
       }
 
+      setActiveReportId(reportId);
       toggleSosAlert();
       showToast(
         isNetworkOnline
-          ? '🚨 ¡Alerta enviada a Central y vecinos cercanos con GPS!'
-          : '📡 Guardado en cola SQLite local (Se enviará al conectar)'
+          ? '🚨 ¡Alerta enviada a Central y brigadistas cercanos!'
+          : '📡 Guardado en SQLite local (se sincronizará al conectar)'
       );
     } catch (e: any) {
       showToast('Alerta despachada en modo de respaldo.');
@@ -139,97 +153,104 @@ export const SosModal = () => {
           </View>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
-            {/* Switch: Crisis Comunitaria vs Emergencia Individual */}
-            <View style={[styles.switchBox, isCrisisRealActive && styles.switchBoxCrisis]}>
-              <View style={styles.switchTextContainer}>
-                <Text style={[styles.switchTitle, isCrisisRealActive && styles.switchTitleCrisis]}>
-                  {isCrisisRealActive ? '🚨 MODO CRISIS COMUNITARIA ACTIVO' : '🛡️ Modo Emergencia Individual'}
-                </Text>
-                <Text style={styles.switchSubtitle}>
-                  {isCrisisRealActive
-                    ? 'Activado por terremoto, corte masivo u otra crisis. Toda la app evoluciona a ayuda humanitaria.'
-                    : 'Uso personal para urgencia médica, sospechosos o incidente específico en tu lote.'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.switchButton, isCrisisRealActive && styles.switchButtonCrisisActive]}
-                onPress={toggleCrisisRealMode}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.switchButtonText, isCrisisRealActive && styles.switchButtonTextCrisis]}>
-                  {isCrisisRealActive ? 'Desactivar Modo Crisis' : 'Activar Crisis Comunitaria'}
-                </Text>
-              </TouchableOpacity>
+            {/* 1. Selector en Grid 2x2 ergonómico */}
+            <Text style={styles.sectionTitle}>¿QUÉ PASÓ?</Text>
+            <View style={styles.incidentGrid}>
+              {INCIDENT_OPTIONS.map((option) => {
+                const isSelected = selectedIncident === option.type;
+                return (
+                  <TouchableOpacity
+                    key={option.type}
+                    style={[styles.incidentOption, isSelected && styles.incidentOptionSelected]}
+                    onPress={() => setSelectedIncident(option.type)}
+                    disabled={isSosAlertSent}
+                    activeOpacity={0.8}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isSelected }}
+                  >
+                    <Ionicons 
+                      name={option.icon} 
+                      size={20} 
+                      color={isSelected ? '#b91c1c' : '#475569'} 
+                    />
+                    <Text style={[styles.incidentOptionText, isSelected && styles.incidentOptionTextSelected]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            {/* Selector de Motivo de Incidente (Fase 4) */}
-            {!isSosAlertSent && (
-              <View style={styles.incidentSelector}>
-                <Text style={styles.incidentTitle}>Selecciona el motivo de auxilio:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.incidentScroll}>
-                  {INCIDENT_OPTIONS.map((opt) => {
-                    const isSelected = selectedIncident === opt.type;
-                    return (
-                      <TouchableOpacity
-                        key={opt.type}
-                        style={[styles.incidentChip, isSelected && styles.incidentChipActive]}
-                        onPress={() => setSelectedIncident(opt.type)}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons
-                          name={opt.icon}
-                          size={15}
-                          color={isSelected ? '#ffffff' : '#475569'}
-                        />
-                        <Text style={[styles.incidentChipText, isSelected && styles.incidentChipTextActive]}>
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            )}
+            {/* Aviso de Ubicación GPS */}
+            <View style={styles.locationHint}>
+              <Ionicons name="location-outline" size={15} color="#475569" />
+              <Text style={styles.locationHintText}>Se compartirá tu ubicación actual</Text>
+            </View>
 
-            {/* Gran Botón de Pánico */}
+            {/* 2. Gran Botón de Pánico / Cancelar Alerta */}
             <View style={styles.panicContainer}>
               <TouchableOpacity
-                style={[styles.panicButton, isSosAlertSent && styles.panicButtonActive]}
+                style={[
+                  styles.panicButton,
+                  isSosAlertSent && styles.panicButtonActive,
+                  (isSubmitting || (!isSosAlertSent && !selectedIncident)) && styles.panicButtonDisabled,
+                ]}
                 onPress={handlePanicAction}
-                activeOpacity={0.8}
-                disabled={isSubmitting || isLocationLoading}
+                disabled={isSubmitting || isLocationLoading || (!isSosAlertSent && !selectedIncident)}
+                activeOpacity={0.85}
               >
                 {isSubmitting || isLocationLoading ? (
                   <ActivityIndicator size="large" color="#ffffff" />
                 ) : (
                   <>
-                    <MaterialIcons name="warning" size={42} color="#ffffff" />
+                    <MaterialIcons name="warning" size={38} color="#ffffff" />
                     <Text style={styles.panicButtonText}>
-                      {isSosAlertSent ? '¡ALERTA SOS ENVIADA!' : 'BOTÓN DE PÁNICO'}
+                      {isSosAlertSent
+                        ? 'CANCELAR ALERTA'
+                        : 'GUARDAR ALERTA DE RESCATE'}
                     </Text>
                     <Text style={styles.panicSubtext}>
                       {isSosAlertSent
-                        ? 'Presiona para cancelar alerta vecinal'
-                        : 'Toca para despachar auxilio inmediato con GPS'}
+                        ? 'Guardada localmente; pendiente de sincronización'
+                        : selectedIncident
+                          ? 'Se guardará el motivo y tu ubicación'
+                          : 'Elige una opción para continuar'}
                     </Text>
                   </>
                 )}
               </TouchableOpacity>
             </View>
 
-            {/* Llamadas de Emergencia Directas (1 toque) */}
-            <Text style={styles.sectionTitle}>Líneas Directas de Auxilio Rápido</Text>
-            {MOCK_DIRECT_CALLS.map((call) => (
+            {/* 3. Tarjeta ¿Afecta a varias viviendas? (Modo Crisis Comunitaria) */}
+            <View style={[styles.switchBox, isCrisisRealActive && styles.switchBoxCrisis]}>
+              <View style={styles.switchTextContainer}>
+                <Text style={[styles.switchTitle, isCrisisRealActive && styles.switchTitleCrisis]}>
+                  {isCrisisRealActive ? 'Crisis comunitaria activa' : '¿Afecta a varias viviendas?'}
+                </Text>
+                <Text style={styles.switchSubtitle}>Activa el tablero vecinal de emergencia.</Text>
+              </View>
               <TouchableOpacity
+                style={[styles.switchButton, isCrisisRealActive && styles.switchButtonCrisisActive]}
+                onPress={toggleCrisisRealMode}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.switchButtonText, isCrisisRealActive && styles.switchButtonTextCrisis]}>
+                  {isCrisisRealActive ? 'Desactivar' : 'Activar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 4. Llamadas Directas de Auxilio Rápido */}
+            <Text style={styles.sectionTitle}>LÍNEAS DIRECTAS DE AUXILIO RÁPIDO</Text>
+            {MOCK_DIRECT_CALLS.map((call) => (
+              <View
                 key={call.id}
                 style={styles.callRow}
-                onPress={() => handleCall(call.phone, call.name)}
-                activeOpacity={0.85}
               >
                 <View style={styles.callIconBg}>
                   {call.iconType === 'shield' && <MaterialCommunityIcons name="shield-account" size={22} color="#1d4ed8" />}
-                  {call.iconType === 'ambulance' && <FontAwesome5 name="ambulance" size={20} color="#dc2626" />}
-                  {call.iconType === 'fire' && <FontAwesome5 name="fire-extinguisher" size={20} color="#ea580c" />}
+                  {call.iconType === 'ambulance' && <FontAwesome5 name="ambulance" size={19} color="#dc2626" />}
+                  {call.iconType === 'fire' && <FontAwesome5 name="fire-extinguisher" size={19} color="#ea580c" />}
                   {call.iconType === 'police' && <MaterialIcons name="local-police" size={22} color="#1e3a8a" />}
                 </View>
 
@@ -238,11 +259,15 @@ export const SosModal = () => {
                   <Text style={styles.callSubtitle}>{call.subtitle}</Text>
                 </View>
 
-                <View style={styles.callNumberBox}>
+                <TouchableOpacity
+                  style={styles.callNumberBox}
+                  onPress={() => handleCall(call.phone, call.name)}
+                  activeOpacity={0.8}
+                >
                   <Ionicons name="call" size={13} color="#ffffff" />
                   <Text style={styles.callNumberText}>{call.badgeCode || call.phone}</Text>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             ))}
 
             <View style={{ height: 24 }} />
@@ -272,80 +297,181 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: '#cbd5e1',
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    flex: 1,
   },
   headerIconBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#dc2626',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '900',
     color: '#0f172a',
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748b',
-    fontWeight: '500',
+    fontWeight: '600',
+    marginTop: 1,
   },
   closeButton: {
-    padding: 6,
+    backgroundColor: '#f1f5f9',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   body: {
-    paddingHorizontal: 20,
-    paddingTop: 14,
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 0.4,
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  incidentGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  incidentOption: {
+    width: '48%',
+    minHeight: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  incidentOptionSelected: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#dc2626',
+  },
+  incidentOptionText: {
+    flex: 1,
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  incidentOptionTextSelected: {
+    color: '#991b1b',
+  },
+  locationHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 12,
+  },
+  locationHintText: {
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  panicContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  panicButton: {
+    backgroundColor: '#dc2626',
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#dc2626',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#fca5a5',
+  },
+  panicButtonActive: {
+    backgroundColor: '#991b1b',
+    borderColor: '#f87171',
+  },
+  panicButtonDisabled: {
+    opacity: 0.65,
+  },
+  panicButtonText: {
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginTop: 4,
+  },
+  panicSubtext: {
+    color: '#fecaca',
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
   },
   switchBox: {
     backgroundColor: '#f8fafc',
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    padding: 14,
-    marginBottom: 14,
+    padding: 12,
+    marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   switchBoxCrisis: {
     backgroundColor: '#fef2f2',
     borderColor: '#fca5a5',
   },
   switchTextContainer: {
-    marginBottom: 10,
+    flex: 1,
+    marginRight: 10,
   },
   switchTitle: {
     fontSize: 13,
-    fontWeight: '800',
-    color: '#1e293b',
+    fontWeight: '900',
+    color: '#0f172a',
     marginBottom: 3,
   },
   switchTitleCrisis: {
-    color: '#dc2626',
+    color: '#991b1b',
   },
   switchSubtitle: {
     fontSize: 11,
     color: '#64748b',
-    lineHeight: 16,
+    lineHeight: 15,
   },
   switchButton: {
     backgroundColor: '#0f172a',
-    paddingVertical: 9,
     borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     alignItems: 'center',
   },
   switchButtonCrisisActive: {
@@ -359,100 +485,26 @@ const styles = StyleSheet.create({
   switchButtonTextCrisis: {
     color: '#ffffff',
   },
-  incidentSelector: {
-    marginBottom: 12,
-  },
-  incidentTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-    marginBottom: 6,
-  },
-  incidentScroll: {
-    flexDirection: 'row',
-  },
-  incidentChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    marginRight: 8,
-  },
-  incidentChipActive: {
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
-  },
-  incidentChipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  incidentChipTextActive: {
-    color: '#ffffff',
-  },
-  panicContainer: {
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  panicButton: {
-    width: '100%',
-    backgroundColor: '#dc2626',
-    borderRadius: 20,
-    paddingVertical: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#dc2626',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  panicButtonActive: {
-    backgroundColor: '#15803d',
-    shadowColor: '#15803d',
-  },
-  panicButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginTop: 6,
-  },
-  panicSubtext: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#334155',
-    marginTop: 16,
-    marginBottom: 10,
-  },
   callRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffff',
     borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    padding: 12,
-    marginBottom: 8,
+    marginBottom: 10,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
   },
   callIconBg: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -461,27 +513,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   callName: {
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '800',
     color: '#0f172a',
   },
   callSubtitle: {
-    fontSize: 10.5,
+    fontSize: 11,
     color: '#64748b',
     marginTop: 1,
   },
   callNumberBox: {
+    backgroundColor: '#16a34a',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#1d4ed8',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
+    gap: 5,
   },
   callNumberText: {
     color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
+    fontSize: 12,
+    fontWeight: '900',
   },
 });

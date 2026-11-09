@@ -749,8 +749,9 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   backButton: {
-    minWidth: 92,
-    paddingHorizontal: 12,
+    minWidth: 96,
+    flexShrink: 0,
+    paddingHorizontal: 14,
     paddingVertical: 11,
     borderRadius: 12,
     borderWidth: 1.5,

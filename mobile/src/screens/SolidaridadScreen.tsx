@@ -572,6 +572,7 @@ export const SolidaridadScreen = () => {
           favor.phone === currentUser.phone ||
           favor.id.startsWith('fav-') ||
           currentUser.role === 'Junta Vecinal';
+        const firstName = favor.ownerName.split(' ')[0] || favor.ownerName;
 
         const categoryLabel = {
           prestamo: 'Préstamo',
@@ -637,46 +638,74 @@ export const SolidaridadScreen = () => {
               </View>
             )}
 
+            {/* Fila de Confianza Presumida */}
+            <View style={styles.trustBadgeRow}>
+              <View style={[
+                styles.trustBadge,
+                isReceived ? styles.trustBadgeReceived : hasContacted ? styles.trustBadgePending : styles.trustBadgeInitial
+              ]}>
+                {isReceived ? (
+                  <>
+                    <Ionicons name="checkmark-circle" size={13} color="#16a34a" />
+                    <Text style={styles.trustBadgeTextReceived}>Ayuda Concluida y Confirmada</Text>
+                  </>
+                ) : hasContacted ? (
+                  <>
+                    <Ionicons name="time" size={13} color="#d97706" />
+                    <Text style={styles.trustBadgeTextPending}>Ayuda en proceso con {firstName}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="shield-checkmark" size={13} color="#2563eb" />
+                    <Text style={styles.trustBadgeTextInitial}>Confianza Presumida • Sin códigos</Text>
+                  </>
+                )}
+              </View>
+            </View>
+
             {/* Descripción fija y visible */}
             <View style={styles.descriptionBox}>
+              <Text style={styles.descriptionHeaderTitle}>DETALLES DEL FAVOR EN LA URBANIZACIÓN</Text>
               <Text style={styles.descriptionText}>{favor.description}</Text>
             </View>
 
             {/* Acciones de Contacto y Confirmación */}
             <View style={styles.actionContainer}>
               {isReceived ? (
-                <View style={styles.receivedBadge}>
-                  <Ionicons name="checkmark-done-circle" size={18} color="#15803d" />
-                  <Text style={styles.receivedText}>Ayuda entregada con éxito ✓ (+1 favor)</Text>
+                <View style={styles.receivedBadgeContainer}>
+                  <Ionicons name="checkmark-circle" size={18} color="#16a34a" />
+                  <Text style={styles.receivedBadgeText}>✓ Ayuda Recibida y Agradecida</Text>
                 </View>
               ) : hasContacted ? (
-                <View style={styles.contactedRow}>
-                  <TouchableOpacity
-                    style={styles.whatsappActiveBtn}
-                    onPress={() => handleOpenWhatsapp(favor)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="logo-whatsapp" size={16} color="#ffffff" />
-                    <Text style={styles.whatsappActiveText}>Coordinar</Text>
-                  </TouchableOpacity>
+                <View style={styles.contactedContainer}>
                   <TouchableOpacity
                     style={styles.markReceivedBtn}
                     onPress={() => handleMarkAsReceived(favor)}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="checkmark" size={16} color="#ffffff" />
+                    <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
                     <Text style={styles.markReceivedText}>Marcar como Recibido</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => handleOpenWhatsapp(favor)}
+                    style={styles.recontactLink}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.recontactLinkText}>
+                      ¿Escribir nuevamente por WhatsApp a {firstName}?
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <TouchableOpacity
-                  style={[styles.contactBtn, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
+                  style={[styles.whatsappButton, isCrisisRealActive && { backgroundColor: '#dc2626' }]}
                   onPress={() => handleOpenWhatsapp(favor)}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="chatbubbles-outline" size={17} color="#ffffff" />
-                  <Text style={styles.contactBtnText}>
-                    {isCrisisRealActive ? 'Solicitar Recurso de Auxilio' : favor.actionButtonText}
+                  <Ionicons name="logo-whatsapp" size={17} color="#ffffff" />
+                  <Text style={styles.whatsappButtonText}>
+                    {isCrisisRealActive ? 'Solicitar Recurso de Auxilio' : `Chat WhatsApp con ${firstName}`}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1449,5 +1478,95 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#dc2626',
+  },
+  trustBadgeRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  trustBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  trustBadgeInitial: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#dbeafe',
+  },
+  trustBadgePending: {
+    backgroundColor: '#fffbeb',
+    borderColor: '#fef3c7',
+  },
+  trustBadgeReceived: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  trustBadgeTextInitial: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1d4ed8',
+  },
+  trustBadgeTextPending: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#b45309',
+  },
+  trustBadgeTextReceived: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#16a34a',
+  },
+  descriptionHeaderTitle: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    color: '#64748b',
+    marginBottom: 3,
+    letterSpacing: 0.3,
+  },
+  whatsappButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 12,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  whatsappButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  contactedContainer: {
+    gap: 6,
+  },
+  recontactLink: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  recontactLinkText: {
+    color: '#16a34a',
+    fontSize: 11,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
+  receivedBadgeContainer: {
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#bbf7d0',
+    borderRadius: 12,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  receivedBadgeText: {
+    color: '#16a34a',
+    fontSize: 12,
+    fontWeight: '900',
   },
 });
