@@ -24,6 +24,12 @@
     },
     "plugins": [
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fe551327-d60a-4b38-9e0a-f8a736f8e4f6"
+      }
+    },
+    "owner": "01link"
   }
 }
