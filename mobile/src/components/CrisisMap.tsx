@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, LayoutChangeEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import Svg, { Rect, Circle as SvgCircle, Line, G, Text as SvgText } from 'react-native-svg';
 import { CURRENT_USER } from '../mock/data';
 import { useApp } from '../context/AppContext';
 
@@ -46,13 +46,6 @@ export interface MapPinItem {
 
 type AnyMapItem = MapPinItem;
 
-const MAP_REGION = {
-  latitude: -11.8675,
-  longitude: -77.0754,
-  latitudeDelta: 0.008,
-  longitudeDelta: 0.008,
-};
-
 const COMMUNITY_LABELS: Record<string, string> = {
   servicio: 'Oficios y Servicios',
   favor: 'Cadena de Favores',
@@ -75,10 +68,10 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export const CrisisMap = () => {
-  const mapRef = useRef<MapView | null>(null);
   const { isCrisisRealActive, toggleCrisisRealMode, customServices, customFavores } = useApp();
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [selectedItem, setSelectedItem] = useState<AnyMapItem | null>(null);
+  const [mapSize, setMapSize] = useState({ width: 340, height: 230 });
 
   const canViewVulnerableLocations = CURRENT_USER.role === 'Junta Vecinal';
 
@@ -98,89 +91,110 @@ export const CrisisMap = () => {
     type: 'favor' as const,
     label: `${f.title} (${f.ownerName})`,
     detail: `${f.location} · ${f.description}`,
-    latitude: -11.8665 + (idx * 0.0005),
-    longitude: -77.0746 - (idx * 0.0004),
-    icon: f.categoria === 'donacion' ? 'cube' : f.categoria === 'acompanamiento' ? 'people' : 'gift',
+    latitude: -11.8665 + (idx * 0.0007),
+    longitude: -77.0745 - (idx * 0.0005),
+    icon: 'gift',
   }));
 
-  // Selección dinámica de datos según estado de crisis (evolución de la app)
-  const currentItems = isCrisisRealActive
-    ? CRISIS_ITEMS
-    : [...dynamicServiceItems, ...dynamicFavorItems, ...COMMUNITY_ITEMS];
+  const allItems: AnyMapItem[] = isCrisisRealActive
+    ? [
+        ...CRISIS_ITEMS.filter((item) => {
+          if (item.type === 'vulnerable' && !canViewVulnerableLocations) {
+            return false;
+          }
+          return true;
+        }),
+      ]
+    : [
+        ...COMMUNITY_ITEMS,
+        ...dynamicServiceItems,
+        ...dynamicFavorItems,
+      ];
+
+  const visibleItems = allItems.filter((item) => {
+    if (activeFilter === 'all') return true;
+    return item.type === activeFilter;
+  });
+
+  const visibleClusters = visibleItems.filter((i) => i.type === 'cluster');
+
   const currentLabels = isCrisisRealActive ? CRISIS_LABELS : COMMUNITY_LABELS;
 
-  const availableFilters: { type: string; label: string; count?: number }[] = [
+  const filters: { type: string; label: string; count?: number }[] = [
     { type: 'all', label: 'Todos' },
-    ...Object.keys(currentLabels).map((t) => ({
-      type: t,
-      label: currentLabels[t],
-      count: (currentItems as readonly AnyMapItem[]).filter((i) => i.type === t).length,
+    ...Object.keys(currentLabels).map((key) => ({
+      type: key,
+      label: currentLabels[key],
+      count: allItems.filter((i) => i.type === key).length,
     })),
   ];
 
-  const filters = availableFilters.filter(
-    (f) => canViewVulnerableLocations || f.type !== 'vulnerable'
-  );
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      setMapSize({ width, height });
+    }
+  };
 
-  const visibleItems = (currentItems as readonly AnyMapItem[]).filter(
-    (item) =>
-      (canViewVulnerableLocations || item.type !== 'vulnerable') &&
-      (activeFilter === 'all' || item.type === activeFilter)
-  );
+  // Conversión matemática de coordenadas geográficas (WGS84) al canvas SVG táctico
+  const toX = (lon: number) => {
+    const minLon = -77.0778;
+    const maxLon = -77.0732;
+    const norm = (lon - minLon) / (maxLon - minLon);
+    return Math.max(22, Math.min(mapSize.width - 22, norm * mapSize.width));
+  };
 
-  const visibleClusters = visibleItems.filter((i) => i.type === 'cluster') as MapPinItem[];
-
-  const focusMap = (item: AnyMapItem) => {
-    setSelectedItem(item);
-    mapRef.current?.animateToRegion(
-      {
-        latitude: item.latitude,
-        longitude: item.longitude,
-        latitudeDelta: 0.003,
-        longitudeDelta: 0.003,
-      },
-      350
-    );
+  const toY = (lat: number) => {
+    const maxLat = -11.8655;
+    const minLat = -11.8688;
+    const norm = (maxLat - lat) / (maxLat - minLat);
+    return Math.max(22, Math.min(mapSize.height - 22, norm * mapSize.height));
   };
 
   return (
-    <View style={[styles.container, isCrisisRealActive && styles.containerCrisis]}>
-      {/* Encabezado Camaleónico */}
+    <View style={styles.container}>
+      {/* Cabecera del Mapa */}
       <View style={styles.header}>
-        <View style={[styles.headerIcon, isCrisisRealActive && styles.headerIconCrisis]}>
+        <View style={styles.titleRow}>
           <Ionicons
-            name={isCrisisRealActive ? 'warning' : 'map'}
-            size={18}
-            color={isCrisisRealActive ? '#dc2626' : '#1d4ed8'}
+            name={isCrisisRealActive ? 'warning' : 'navigate-circle'}
+            size={22}
+            color={isCrisisRealActive ? '#dc2626' : '#2563eb'}
           />
-        </View>
-        <View style={styles.headerText}>
-          <Text style={[styles.title, isCrisisRealActive && styles.titleCrisis]}>
-            {isCrisisRealActive
-              ? 'Mapa Táctico de Emergencia y Rescate'
-              : 'Mapa Comunitario · Economía y Solidaridad'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {isCrisisRealActive
-              ? 'Zonas seguras, agua potable y clústeres IA de rescate'
-              : 'Oficios locales avalados por vecinos y favores activos'}
-          </Text>
+          <View>
+            <Text style={[styles.title, isCrisisRealActive && styles.titleCrisis]}>
+              {isCrisisRealActive ? 'Mapa Táctico de Emergencia' : 'Mapa Barrial de Proximidad'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {isCrisisRealActive
+                ? '📍 Clústeres IA (DBSCAN) y Puntos Seguros Activos'
+                : 'Urb. Las Palmeras · Oficios y Recursos en tiempo real'}
+            </Text>
+          </View>
         </View>
 
-        {/* Switch Demostrativo para el Jurado */}
         <TouchableOpacity
           style={[styles.evolveBtn, isCrisisRealActive && styles.evolveBtnCrisis]}
           onPress={toggleCrisisRealMode}
           activeOpacity={0.8}
         >
+          <Ionicons
+            name={isCrisisRealActive ? 'shield-checkmark' : 'alert-circle'}
+            size={16}
+            color={isCrisisRealActive ? '#16a34a' : '#dc2626'}
+          />
           <Text style={[styles.evolveBtnText, isCrisisRealActive && styles.evolveBtnTextCrisis]}>
             {isCrisisRealActive ? '☀️ Ver Normal' : '🚨 Simular SOS'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Chips de Filtros dinámicos */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+      {/* Filtros Horizontales */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filters}
+      >
         {filters.map((filter) => {
           const isActive = activeFilter === filter.type;
           return (
@@ -211,60 +225,146 @@ export const CrisisMap = () => {
         })}
       </ScrollView>
 
-      {/* Mapa Nativo (react-native-maps) */}
-      <View style={styles.mapFrame}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={MAP_REGION}
-          onPress={() => setSelectedItem(null)}
-        >
-          {/* Círculos de radio para clústeres DBSCAN en modo crisis */}
+      {/* Canvas Táctico Vectorial Resiliente (100% Offline, Sin Caídas) */}
+      <View style={styles.mapFrame} onLayout={onLayout}>
+        <Svg width={mapSize.width} height={mapSize.height} style={StyleSheet.absoluteFill}>
+          {/* Fondo */}
+          <Rect
+            x="0"
+            y="0"
+            width={mapSize.width}
+            height={mapSize.height}
+            fill={isCrisisRealActive ? '#090d16' : '#f8fafc'}
+          />
+
+          {/* Grilla y Calles Principales */}
+          <G stroke={isCrisisRealActive ? '#1e293b' : '#e2e8f0'} strokeWidth="1">
+            <Line x1="0" y1={mapSize.height * 0.35} x2={mapSize.width} y2={mapSize.height * 0.35} strokeDasharray="4 4" />
+            <Line x1="0" y1={mapSize.height * 0.70} x2={mapSize.width} y2={mapSize.height * 0.70} strokeDasharray="4 4" />
+            <Line x1={mapSize.width * 0.33} y1="0" x2={mapSize.width * 0.33} y2={mapSize.height} strokeDasharray="4 4" />
+            <Line x1={mapSize.width * 0.66} y1="0" x2={mapSize.width * 0.66} y2={mapSize.height} strokeDasharray="4 4" />
+          </G>
+
+          {/* Anillos de Radar de Cobertura */}
+          <G stroke={isCrisisRealActive ? 'rgba(220, 38, 38, 0.25)' : 'rgba(37, 99, 235, 0.18)'} strokeWidth="1.2">
+            <SvgCircle cx={mapSize.width / 2} cy={mapSize.height / 2} r={mapSize.height * 0.22} fill="none" />
+            <SvgCircle cx={mapSize.width / 2} cy={mapSize.height / 2} r={mapSize.height * 0.42} fill="none" strokeDasharray="3 3" />
+          </G>
+
+          {/* Zonas de Peligro Clúster DBSCAN (Rojo Traslúcido) */}
           {isCrisisRealActive &&
-            visibleClusters.map((cluster) => (
-              <Circle
-                key={`${cluster.id}-radius`}
-                center={{ latitude: cluster.latitude, longitude: cluster.longitude }}
-                radius={150}
-                strokeColor="rgba(220, 38, 38, 0.8)"
-                fillColor="rgba(220, 38, 38, 0.15)"
-                strokeWidth={2}
-              />
-            ))}
+            visibleClusters.map((cluster) => {
+              const cx = toX(cluster.longitude);
+              const cy = toY(cluster.latitude);
+              return (
+                <G key={`${cluster.id}-halo`}>
+                  <SvgCircle
+                    cx={cx}
+                    cy={cy}
+                    r={36}
+                    fill="rgba(220, 38, 38, 0.25)"
+                    stroke="#dc2626"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 2"
+                  />
+                  <SvgCircle cx={cx} cy={cy} r={46} fill="rgba(220, 38, 38, 0.08)" />
+                </G>
+              );
+            })}
 
-          {visibleItems.map((item) => (
-            <Marker
+          {/* Nombres de Ejes Viales Urbanos */}
+          <SvgText
+            x={10}
+            y={mapSize.height * 0.32}
+            fontSize="8.5"
+            fontWeight="bold"
+            fill={isCrisisRealActive ? '#475569' : '#94a3b8'}
+          >
+            Calle Los Sauces
+          </SvgText>
+          <SvgText
+            x={10}
+            y={mapSize.height * 0.67}
+            fontSize="8.5"
+            fontWeight="bold"
+            fill={isCrisisRealActive ? '#475569' : '#94a3b8'}
+          >
+            Av. Las Palmeras
+          </SvgText>
+          <SvgText
+            x={mapSize.width - 90}
+            y={14}
+            fontSize="8"
+            fontWeight="bold"
+            fill={isCrisisRealActive ? '#64748b' : '#94a3b8'}
+          >
+            Radar PostGIS
+          </SvgText>
+        </Svg>
+
+        {/* Marcadores Interactivos Táctiles */}
+        {visibleItems.map((item) => {
+          const posX = toX(item.longitude);
+          const posY = toY(item.latitude);
+          const isSelected = selectedItem?.id === item.id;
+          const color = TYPE_COLORS[item.type] || '#2563eb';
+
+          return (
+            <TouchableOpacity
               key={item.id}
-              coordinate={{ latitude: item.latitude, longitude: item.longitude }}
-              title={item.label}
-              description={item.detail}
+              style={[
+                styles.pinMarker,
+                {
+                  left: posX - 15,
+                  top: posY - 15,
+                  backgroundColor: color,
+                  borderColor: isSelected ? '#ffffff' : 'rgba(255, 255, 255, 0.75)',
+                  transform: [{ scale: isSelected ? 1.25 : 1 }],
+                  zIndex: isSelected ? 99 : 10,
+                },
+              ]}
               onPress={() => setSelectedItem(item)}
+              activeOpacity={0.8}
             >
-              <View style={[styles.marker, { backgroundColor: TYPE_COLORS[item.type] || '#2563eb' }]}>
-                <Ionicons name={item.icon as any} size={15} color="#ffffff" />
-                {'count' in item && <Text style={styles.markerCount}>{item.count}</Text>}
-              </View>
-            </Marker>
-          ))}
-        </MapView>
+              <Ionicons name={item.icon as any} size={14} color="#ffffff" />
+              {'count' in item && item.count ? (
+                <View style={styles.badgeCount}>
+                  <Text style={styles.badgeCountText}>{item.count}</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
 
-        {/* Badge de Estado */}
+        {/* Centro del Radar: Tu Ubicación Actual */}
+        <View
+          pointerEvents="none"
+          style={[
+            styles.userBeacon,
+            {
+              left: mapSize.width / 2 - 8,
+              top: mapSize.height / 2 - 8,
+            },
+          ]}
+        >
+          <View style={styles.userBeaconCore} />
+        </View>
+
+        {/* Badge Superior de Estado */}
         <View pointerEvents="none" style={styles.statusBadge}>
           <View style={[styles.statusDot, isCrisisRealActive ? styles.dotCrisis : styles.dotNormal]} />
           <Text style={styles.statusText}>
-            {isCrisisRealActive ? 'MODO CRISIS' : 'ECONOMÍA BARRIAL'}
+            {isCrisisRealActive ? 'ALERTA TÁCTICA ACTIVA' : 'LIMA NORTE · GPS ACTIVO'}
           </Text>
         </View>
 
         {/* Botón de Recentrado */}
         <TouchableOpacity
           style={styles.recenterButton}
-          onPress={() => {
-            mapRef.current?.animateToRegion(MAP_REGION, 350);
-            setSelectedItem(null);
-          }}
+          onPress={() => setSelectedItem(null)}
+          activeOpacity={0.85}
         >
-          <Ionicons name="locate" size={18} color="#0f172a" />
+          <Ionicons name="locate" size={16} color="#0f172a" />
         </TouchableOpacity>
       </View>
 
@@ -302,124 +402,149 @@ export const CrisisMap = () => {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
     backgroundColor: '#ffffff',
-  },
-  containerCrisis: {
-    borderColor: '#fca5a5',
-    backgroundColor: '#fff5f5',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 9,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  titleRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#eff6ff',
-  },
-  headerIconCrisis: {
-    backgroundColor: '#fee2e2',
-  },
-  headerText: {
+    gap: 8,
     flex: 1,
   },
   title: {
+    fontSize: 14.5,
+    fontWeight: '800',
     color: '#0f172a',
-    fontSize: 13,
-    fontWeight: '900',
   },
   titleCrisis: {
-    color: '#991b1b',
+    color: '#dc2626',
   },
   subtitle: {
+    fontSize: 10.5,
     color: '#64748b',
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 2,
+    fontWeight: '500',
+    marginTop: 1,
   },
   evolveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
     paddingHorizontal: 9,
     paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: '#fee2e2',
-    borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderRadius: 20,
   },
   evolveBtnCrisis: {
-    backgroundColor: '#dbeafe',
-    borderColor: '#bfdbfe',
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
   },
   evolveBtnText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
-    color: '#b91c1c',
+    color: '#dc2626',
   },
   evolveBtnTextCrisis: {
-    color: '#1d4ed8',
+    color: '#16a34a',
   },
   filters: {
     gap: 6,
     paddingBottom: 10,
   },
   filterChip: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 14,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#dbe3ec',
-    backgroundColor: '#f8fafc',
+    paddingVertical: 4,
   },
   filterChipActiveNormal: {
-    borderColor: '#1d4ed8',
-    backgroundColor: '#1d4ed8',
+    backgroundColor: '#2563eb',
   },
   filterChipActiveCrisis: {
-    borderColor: '#b91c1c',
-    backgroundColor: '#b91c1c',
+    backgroundColor: '#dc2626',
   },
   filterText: {
-    color: '#334155',
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
   },
   filterTextActive: {
     color: '#ffffff',
+    fontWeight: '800',
   },
   mapFrame: {
-    height: 250,
-    borderRadius: 12,
+    height: 220,
+    borderRadius: 14,
     overflow: 'hidden',
     position: 'relative',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#cbd5e1',
   },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  marker: {
-    flexDirection: 'row',
+  pinMarker: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 6,
-    borderRadius: 16,
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+  },
+  badgeCount: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#dc2626',
+  },
+  badgeCountText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#dc2626',
+  },
+  userBeacon: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(37, 99, 235, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  userBeaconCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2563eb',
     borderWidth: 1.5,
     borderColor: '#ffffff',
-    gap: 3,
-  },
-  markerCount: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '900',
   },
   statusBadge: {
     position: 'absolute',
@@ -427,13 +552,11 @@ const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderRadius: 8,
   },
   statusDot: {
     width: 7,
@@ -441,34 +564,39 @@ const styles = StyleSheet.create({
     borderRadius: 3.5,
   },
   dotNormal: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#22c55e',
   },
   dotCrisis: {
-    backgroundColor: '#dc2626',
+    backgroundColor: '#ef4444',
   },
   statusText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#0f172a',
+    color: '#ffffff',
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   recenterButton: {
     position: 'absolute',
     right: 8,
     bottom: 8,
-    width: 34,
-    height: 34,
-    borderRadius: 8,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderRadius: 16,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
     marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
   },
   legendItem: {
     flexDirection: 'row',
@@ -481,25 +609,25 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendText: {
-    fontSize: 10,
+    fontSize: 10.5,
     color: '#475569',
-    fontWeight: '700',
+    fontWeight: '600',
   },
   selectedItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
+    borderRadius: 12,
     padding: 10,
     marginTop: 10,
   },
   selectedIcon: {
     width: 34,
     height: 34,
-    borderRadius: 8,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -507,19 +635,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectedTitle: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '800',
     color: '#0f172a',
   },
   selectedDetail: {
-    fontSize: 10,
-    color: '#64748b',
-    marginTop: 2,
+    fontSize: 10.5,
+    color: '#475569',
+    marginTop: 1,
   },
   selectedCoord: {
-    fontSize: 9,
-    color: '#1d4ed8',
-    fontWeight: '700',
+    fontSize: 9.5,
+    color: '#64748b',
+    fontWeight: '600',
     marginTop: 2,
   },
 });
